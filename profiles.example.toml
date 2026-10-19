@@ -1,0 +1,27 @@
+# Copy to %APPDATA%\vkeys\profiles.toml and edit.
+# keys map ENV_NAME = store-name (see `vkeys ls`).
+
+[profile.meridian]
+cmd = ["C:\\Users\\<you>\\projects\\personal-projects\\meridian-whisper\\.venv\\Scripts\\python.exe", "ui_hotkey.py"]
+cwd = "C:\\Users\\<you>\\projects\\personal-projects\\meridian-whisper"
+agent-ok = true
+
+[profile.meridian.keys]
+OPENROUTER_API_KEY = "openrouter/meridian"
+
+[profile.eyewright-serve]
+cmd = ["C:\\Users\\<you>\\projects\\eyewright\\.venv\\Scripts\\eyewright.exe", "serve", "--port", "8090"]
+cwd = "C:\\Users\\<you>\\projects\\eyewright"
+agent-ok = true
+
+[profile.eyewright-serve.keys]
+OPENROUTER_API_KEY = "openrouter/eyewright"
+
+# Human-only example: refuses when stdin is not a TTY.
+[profile.publish]
+cmd = ["uv", "publish"]
+cwd = "C:\\Users\\<you>\\projects\\eyewright"
+agent-ok = false
+
+[profile.publish.keys]
+UV_PUBLISH_TOKEN = "pypi/eyewright"
