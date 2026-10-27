@@ -68,3 +68,22 @@ uv sync
 python -m unittest discover -s tests -v
 uv tool install .            # puts vkeys.exe on PATH (.local\bin)
 ```
+
+## Rust port (feat/rust-port)
+
+A Rust implementation of the same CLI lives in `rust/`. **The Python
+implementation is still the default**; the Rust binary is only
+`rust/target/release/vkeys.exe` on this branch. Behavior, vault format, and
+the no-`get` rule are shared.
+
+```powershell
+cd rust
+cargo build --release        # build the Rust binary
+cargo test --release         # interop matrix (python <-> rust)
+
+# from the repo root:
+pwsh parity/run.ps1          # prints PARITY n/N, nonzero on any diff
+```
+
+The parity harness uses temp vaults and temp profiles only. See `PORT.md` for
+the port card, the interop matrix, and every documented deviation.
