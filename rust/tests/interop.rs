@@ -202,7 +202,15 @@ fn rust_vault_read_by_python() {
     let profiles = td.0.join("profiles.toml");
 
     let set = run_vkeys_stdin(
-        &["--vault", s(&vault), "--profiles", s(&profiles), "set", "k"],
+        &[
+            "--vault",
+            s(&vault),
+            "--profiles",
+            s(&profiles),
+            "set",
+            "--stdin",
+            "k",
+        ],
         b"rust-secret-456\n",
     );
     assert!(
@@ -219,6 +227,7 @@ fn rust_vault_read_by_python() {
             "--profiles",
             s(&profiles),
             "set",
+            "--stdin",
             "clé",
         ],
         "valeur-secrète-9\n".as_bytes(),
@@ -299,6 +308,7 @@ fn both_readers_see_same_vault_shape() {
             "--profiles",
             s(&td.0.join("p.toml")),
             "set",
+            "--stdin",
             "a",
         ],
         b"value-12345678\n",

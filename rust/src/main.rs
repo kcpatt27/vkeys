@@ -50,6 +50,12 @@ enum Cmd {
         name: String,
         #[arg(long, help = "read from the Windows clipboard")]
         clipboard: bool,
+        #[arg(
+            long,
+            conflicts_with = "clipboard",
+            help = "read the value from stdin (scripts/agents; avoids a TTY prompt)"
+        )]
+        stdin: bool,
         #[arg(long, help = "overwrite without asking")]
         yes: bool,
     },
@@ -64,6 +70,8 @@ enum Cmd {
         name: String,
         #[arg(long)]
         clipboard: bool,
+        #[arg(long, conflicts_with = "clipboard")]
+        stdin: bool,
     },
     #[command(
         name = "import-env",
@@ -123,12 +131,17 @@ fn cli_main() -> i32 {
         Cmd::Set {
             name,
             clipboard,
+            stdin,
             yes,
-        } => cmd_set(&vault_path, &name, clipboard, yes),
+        } => cmd_set(&vault_path, &name, clipboard, stdin, yes),
         Cmd::Ls => cmd_ls(&vault_path),
         Cmd::Env { profile } => cmd_env(&vault_path, &profiles_path, &profile),
         Cmd::Run { profile } => cmd_run(&vault_path, &profiles_path, &profile),
-        Cmd::Rotate { name, clipboard } => cmd_rotate(&vault_path, &name, clipboard),
+        Cmd::Rotate {
+            name,
+            clipboard,
+            stdin,
+        } => cmd_rotate(&vault_path, &name, clipboard, stdin),
         Cmd::ImportEnv { path, names } => cmd_import_env(&vault_path, &path, &names),
         Cmd::Audit { tail } => cmd_audit(&vault_path, tail),
         Cmd::Selfcheck => cmd_selfcheck(),
@@ -139,23 +152,29 @@ fn open_vault(path: &Path) -> Result<Vault, i32> {
     Vault::open(path).map_err(|e| fail(&e))
 }
 
-fn read_secret(clipboard: bool) -> Result<String, i32> {
-    if clipboard {
-        // Deviation: no tkinter equivalent; always fall back like Python does
-        // when Tk is unavailable. See PORT.md.
-        emit_err("clipboard unavailable; falling back to hidden prompt\n");
-    }
-    let value = if io::stdin().is_terminal() {
-        rpassword::prompt_password("value (hidden): ").map_err(|e| fail(&e.to_string()))?
-    } else {
-        emit_err("value (hidden): ");
+fn read_secret(clipboard: bool, from_stdin: bool) -> Result<String, i32> {
+    if from_stdin {
         let mut line = String::new();
-        match io::stdin().read_line(&mut line) {
-            Ok(0) | Err(_) => return Err(1),
-            Ok(_) => line,
+        return match io::stdin().read_line(&mut line) {
+            Ok(_) => Ok(py_strip(&line).to_string()),
+            Err(_) => Err(1),
+        };
+    }
+    if clipboard {
+        match arboard::Clipboard::new().and_then(|mut c| c.get_text()) {
+            Ok(text) => return Ok(py_strip(&text).to_string()),
+            Err(_) => emit_err("clipboard unavailable; falling back to hidden prompt\n"),
         }
-    };
-    Ok(py_strip(&value).to_string())
+    }
+    if !io::stdin().is_terminal() {
+        // Deliberate: a silent pipe read would let `echo $KEY | vkeys set k`
+        // land a secret in shell history by accident. Opt in explicitly.
+        emit_err("no TTY: pass --stdin to read the value from a pipe\n");
+        return Err(2);
+    }
+    rpassword::prompt_password("value (hidden): ")
+        .map(|v| py_strip(&v).to_string())
+        .map_err(|e| fail(&e.to_string()))
 }
 
 fn confirm_overwrite(name: &str, yes: bool) -> Result<bool, i32> {
@@ -210,7 +229,7 @@ fn cmd_init(vault_path: &Path, profiles_path: &Path) -> i32 {
     0
 }
 
-fn cmd_set(vault_path: &Path, name: &str, clipboard: bool, yes: bool) -> i32 {
+fn cmd_set(vault_path: &Path, name: &str, clipboard: bool, stdin: bool, yes: bool) -> i32 {
     let mut vault = match open_vault(vault_path) {
         Ok(v) => v,
         Err(code) => return code,
@@ -222,7 +241,7 @@ fn cmd_set(vault_path: &Path, name: &str, clipboard: bool, yes: bool) -> i32 {
             Err(code) => return code,
         }
     }
-    let value = match read_secret(clipboard) {
+    let value = match read_secret(clipboard, stdin) {
         Ok(v) => v,
         Err(code) => return code,
     };
@@ -393,7 +412,7 @@ fn cmd_run(vault_path: &Path, profiles_path: &Path, profile_name: &str) -> i32 {
     code
 }
 
-fn cmd_rotate(vault_path: &Path, name: &str, clipboard: bool) -> i32 {
+fn cmd_rotate(vault_path: &Path, name: &str, clipboard: bool, stdin: bool) -> i32 {
     let mut vault = match open_vault(vault_path) {
         Ok(v) => v,
         Err(code) => return code,
@@ -403,7 +422,7 @@ fn cmd_rotate(vault_path: &Path, name: &str, clipboard: bool) -> i32 {
             "rotating {name}; the old value is unrecoverable\n"
         ));
     }
-    let value = match read_secret(clipboard) {
+    let value = match read_secret(clipboard, stdin) {
         Ok(v) => v,
         Err(code) => return code,
     };

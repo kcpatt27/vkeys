@@ -10,8 +10,13 @@ name = "vkeys"
 path = "src/main.rs"
 
 [dependencies]
+# Text only: the default feature pulls the whole `image` stack for clipboard
+# images vkeys never reads.
+arboard = { version = "3", default-features = false }
 base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
+# preserve_order: vault entries keep insertion order on disk, like Python's dict.
+indexmap = { version = "2", features = ["serde"] }
 rpassword = "7"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

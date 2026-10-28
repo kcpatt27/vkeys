@@ -10,18 +10,18 @@ Source:       src/vkeys/*.py @ 0066b83 (cli.py, vault.py, runtime.py, dpapi.py,
               __init__.py; 619 LOC)
 Target:       Rust 1.99.1 (MSVC), crate rust/, package vkeys, binary vkeys.exe
 Entry points: --version; --vault PATH; --profiles PATH; init;
-              set NAME [--clipboard] [--yes]; ls; env PROFILE; run PROFILE;
-              rotate NAME [--clipboard]; import-env PATH [--names a,b];
-              audit [--tail N]; selfcheck
+              set NAME [--clipboard|--stdin] [--yes]; ls; env PROFILE;
+              run PROFILE; rotate NAME [--clipboard|--stdin];
+              import-env PATH [--names a,b]; audit [--tail N]; selfcheck
 Oracle:       parity/run.ps1 (29 cases, byte comparison of stdout/stderr/exit +
-              vault/audit state) and rust/tests/interop.rs (3 cross-impl tests)
+              vault/audit state) and `cargo test` (3 cross-impl interop +
+              3 CLI-contract tests)
 Slices:       1 dpapi (OS edge) -> 2 vault reader/writer -> 3 profiles/scrub/
               audit -> 4 CLI/argv/exit -> 5 child process/env/scrub -> 6 none ->
               7 Windows edges (DPAPI, merged pipe, ppid, icacls, local time)
-Deviations:   D1-D8 below, each with a reason and a local ticket id
-Swap:         not started. Python stays default until a real workload has run
-              through the Rust binary. Rust ships only at
-              rust/target/release/vkeys.exe on this branch.
+Deviations:   D2-D8 below, each with a reason and a local ticket id
+Swap:         real workload passed 2026-10-27 (see "Swap evidence"). Python is
+              still default; the rename/flip is the remaining step.
 ```
 
 ## Build
@@ -59,7 +59,7 @@ byte-identical; the real oracle is the interop matrix below.
 
 ```powershell
 cd rust
-cargo test --release         # 3 tests
+cargo test --release         # 3 interop + 3 CLI-contract tests
 ```
 
 - `python_vault_read_by_rust` — Python writes a vault (plain, unicode, empty
@@ -72,20 +72,41 @@ cargo test --release         # 3 tests
 - `both_readers_see_same_vault_shape` — `names()`/`meta()` shape from Python is
   identical for Python-written and Rust-written vaults.
 
+## Swap evidence
+
+2026-10-27, real vault, real profiles, real secret:
+
+```text
+vkeys.exe set openrouter/meridian      -> stored
+vkeys.exe env meridian                 -> OPENROUTER_API_KEY=<stored: openrouter/meridian>
+vkeys.exe run meridian                 -> Meridian-Whisper started, Whisper large-v3-turbo
+                                          on CUDA, hotkey ready
+vkeys.exe set openrouter/eyewright     -> stored
+vkeys.exe set pypi/eyewright           -> stored
+vkeys.exe ls                           -> 3 entries; meridian uses=2
+```
+
+`run` exercised the clean-env allowlist, DPAPI decrypt, child spawn, and audit
+write in one go. The three stores were then readable by the Python build
+(interop matrix), so the swap is no longer blocked on behavior.
+
 ## Deviations
 
 | id | deviation | reason |
 |---|---|---|
-| D1 | `--clipboard` always prints `clipboard unavailable; falling back to hidden prompt` and prompts; it never reads the Windows clipboard. | Python uses tkinter; no allowed clipboard crate, and the card permits the fallback. Python's own Tk failure path prints the same line. |
 | D2 | `--help`/usage text is clap's, not argparse's. argparse's `--vau` prefix abbreviations and `-V` do not exist. `--version` output is byte-identical (`vkeys 0.1.0`), and usage errors exit 2 in both. | clap is the allowed CLI dep; help text is not part of the compared contract. |
-| D3 | When stdin is not a TTY, Rust `set`/`rotate` read the pipe. Python's `getpass` reads the console directly on Windows and hangs on a pipe, so the harness runs Python through `parity/py_shim.py` (replaces `sys.stdin` so getpass uses its documented fallback) and drops Python's `Warning: Password input may be echoed.` notice. Both then print the same `value (hidden): ` prompt. | The card requires a stdin-piped `set` case; CPython's console-only read is an interpreter artifact, not a product contract. |
+| D3 | **Piped input is explicit.** `set`/`rotate` accept `--stdin`; without it and without a TTY the binary refuses with exit 2. Python's `getpass` reads the console directly and hangs on a pipe, so the harness runs Python through `parity/py_shim.py` and drops Python's `value (hidden): ` prompt (Rust's `--stdin` path is silent). `--stdin` and `--clipboard` are mutually exclusive. | A silent pipe read lets `echo $KEY \| vkeys set k` put a secret in shell history by accident. Opting in is safer and makes the agent path scriptable. Python has no equivalent flag, so the invocation differs while the stored outcome matches. |
 | D4 | Unhandled failures (bad TOML/JSON, missing import file, spawn failure) print `vkeys: <error>` and exit 1; Python prints a traceback and exits 1. | Exit codes match; stderr shape is not compared by any fixture. |
-| D5 | Vault JSON: Rust writes entries sorted by name (BTreeMap) and non-ASCII names as raw UTF-8; Python writes insertion order and `\uXXXX`. Both keep CRLF line endings, 2-space indent, no trailing newline, and the same field order/shape. | Order/escaping are not observable through the CLI (`names()` sorts; JSON readers accept both); DPAPI blobs already make byte equality impossible. |
+| D5 | Vault JSON: both now write **insertion order** (Rust uses `IndexMap`), CRLF, 2-space indent, no trailing newline, same field order. The remaining difference is non-ASCII names: Rust writes raw UTF-8, Python `\uXXXX`. | Order is now identical; escaping is not observable through the CLI, and DPAPI blobs already make byte equality impossible. |
 | D6 | Rust writes stdout/stderr as UTF-8; Python uses the console/locale code page when redirected. | The harness sets `PYTHONIOENCODING=utf-8`; ASCII output is byte-identical. |
 | D7 | Rust prints paths as supplied; Python's `pathlib` normalises `/` to `\` and collapses `.`/repeated separators. | The harness supplies canonical absolute Windows paths; file I/O is unaffected. |
 | D8 | TTY-only flows (overwrite `[y/N]`, human-only typed confirmation) are implemented but not machine-compared. | No pty harness; both code paths mirror the Python prompts and exit codes. Recorded as a test gap, not a claimed pass. |
 
-Local ticket ids are `port-d1`…`port-d8`; this repo has no issue tracker.
+D1 (clipboard) is closed: `arboard` reads the Windows clipboard, text only
+(`default-features = false`, so the `image` stack stays out). On failure it
+prints Python's line and falls back to the hidden prompt.
+
+Local ticket ids are `port-d2`…`port-d8`; this repo has no issue tracker.
 
 ## Do not add `get`
 
@@ -100,10 +121,12 @@ used by `env`/`run`/`selfcheck`, exactly like Python's `Vault.get`.
 |---|---|---|
 | clap | 4.6.7 | derive-based CLI matching the entry points; exit 2 on usage errors |
 | serde + serde_json | 1.0.229 / 1.0.154 | vault JSON read/write |
+| indexmap | 2.14.2 | vault entries keep insertion order on disk, like Python's dict |
 | toml | 0.8.23 (`preserve_order`) | profile parsing; document order is user-visible in `env`. Pulls `indexmap` transitively. |
 | base64 | 0.22.1 | vault `ct` encoding |
 | windows | 0.62.2 | DPAPI (`Win32_Security_Cryptography`), Toolhelp (ppid), pipes (merged child stdout/stderr), `GetLocalTime` |
 | rpassword | 7.5.4 | hidden input on a real console |
+| arboard | 3.7.0, `default-features = false` | text-only clipboard read for `--clipboard`; the default feature would pull the `image` stack |
 
 No async runtime. `parity/` uses only the Python standard library. The Rust
 binary is statically linked (MSVC runtime is the system one), so it adds no

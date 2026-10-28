@@ -1,10 +1,10 @@
 //! Encrypted value store. Metadata is plaintext; values are DPAPI blobs.
 
-use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use base64::Engine;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::dpapi;
@@ -12,7 +12,7 @@ use crate::dpapi;
 #[derive(Serialize, Deserialize)]
 struct VaultFile {
     version: u32,
-    entries: BTreeMap<String, Entry>,
+    entries: IndexMap<String, Entry>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -36,7 +36,7 @@ impl Vault {
         let path = path.into();
         let mut data = VaultFile {
             version: 1,
-            entries: BTreeMap::new(),
+            entries: IndexMap::new(),
         };
         if path.exists() {
             let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -81,7 +81,11 @@ impl Vault {
     }
 
     pub fn names(&self) -> Vec<String> {
-        self.data.entries.keys().cloned().collect()
+        // Python: sorted(self.data["entries"]) - order on disk, order on screen
+        // are different things.
+        let mut names: Vec<String> = self.data.entries.keys().cloned().collect();
+        names.sort();
+        names
     }
 
     pub fn meta(&self, name: &str) -> Option<&Entry> {

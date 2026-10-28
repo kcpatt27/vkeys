@@ -43,6 +43,36 @@ def base_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     return env
 
 
+GLOBAL_VALUE_FLAGS = ("--vault", "--profiles")
+
+
+def subcommand_index(args: list[str]) -> int:
+    i = 0
+    while i < len(args):
+        if args[i] in GLOBAL_VALUE_FLAGS:
+            i += 2
+            continue
+        if args[i].startswith("-"):
+            i += 1
+            continue
+        return i
+    return -1
+
+
+def adapt_args(side: str, args: list[str], stdin: bytes) -> list[str]:
+    """D3: Rust requires an explicit --stdin for piped values.
+
+    Python has no such flag - getpass ignores a pipe and would hang without
+    py_shim. The compared outcome is identical; only the invocation differs.
+    """
+    if side != "rs" or not stdin or "--stdin" in args or "--clipboard" in args:
+        return args
+    i = subcommand_index(args)
+    if i < 0 or args[i] not in ("set", "rotate"):
+        return args
+    return args[: i + 1] + ["--stdin"] + args[i + 1 :]
+
+
 def run_side(
     side: str,
     sandbox: Path,
@@ -50,6 +80,7 @@ def run_side(
     stdin: bytes,
     env_extra: dict[str, str] | None = None,
 ) -> tuple[int, bytes, bytes]:
+    args = adapt_args(side, args, stdin)
     argv = (
         [sys.executable, str(SHIM)] + args
         if side == "py"
@@ -69,6 +100,9 @@ def run_side(
 def norm(text: str, sandbox: Path) -> str:
     text = text.replace(str(sandbox), "<TMP>")
     text = text.replace(str(sandbox).replace("\\", "/"), "<TMP>")
+    # D3: Python's getpass prints a prompt even when the value arrives on a
+    # pipe; the Rust --stdin path is intentionally silent. Drop the prompt.
+    text = text.replace("value (hidden): ", "")
     return TS_RE.sub("<TS>", text)
 
 

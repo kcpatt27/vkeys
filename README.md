@@ -87,3 +87,8 @@ pwsh parity/run.ps1          # prints PARITY n/N, nonzero on any diff
 
 The parity harness uses temp vaults and temp profiles only. See `PORT.md` for
 the port card, the interop matrix, and every documented deviation.
+
+Rust-only addition: `set`/`rotate` take `--stdin` for scripted provisioning
+(`printf '%s' "$KEY" | vkeys set --stdin name`). Without a TTY and without
+`--stdin`, the Rust build refuses instead of reading a pipe silently. There is
+still no `get`.
