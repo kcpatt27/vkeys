@@ -6,3 +6,4 @@ build/
 *.egg-info/
 profiles.toml
 .scratch/
+rust/target/
