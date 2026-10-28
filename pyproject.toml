@@ -2,6 +2,8 @@
 name = "vkeys"
 version = "0.1.0"
 description = "vkeys (virtual keys) - personal, machine-wide key store: profiles inject keys, agents never see them"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = []
 

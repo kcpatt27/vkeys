@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.99"
 description = "vkeys (virtual keys) - personal, machine-wide key store"
+license = "Apache-2.0"
 
 [[bin]]
 name = "vkeys"
