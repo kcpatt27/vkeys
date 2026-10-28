@@ -9,6 +9,10 @@ description = "vkeys (virtual keys) - personal, machine-wide key store"
 name = "vkeys"
 path = "src/main.rs"
 
+[[bin]]
+name = "vkeys-broker"
+path = "src/broker_main.rs"
+
 [dependencies]
 # Text only: the default feature pulls the whole `image` stack for clipboard
 # images vkeys never reads.
@@ -20,6 +24,8 @@ indexmap = { version = "2", features = ["serde"] }
 rpassword = "7"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tiny_http = "0.12"
+ureq = "2"
 # preserve_order: `env` prints profile keys in TOML document order (Python tomllib).
 toml = { version = "0.8", features = ["preserve_order"] }
 windows = { version = "0.62", features = [

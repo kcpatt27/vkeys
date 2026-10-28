@@ -24,7 +24,8 @@ Personal, machine-wide key store (`vkeys` = virtual keys). See `README.md` and
 ## Gate
 
 ```powershell
-python -m unittest discover -s tests -v
+cd rust; cargo test --release
+cd ..; pwsh parity/run.ps1
 vkeys selfcheck
 ```
 

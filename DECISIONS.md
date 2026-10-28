@@ -24,9 +24,9 @@ able to *see* it, and there should be no easy command that reveals one.
 
 **Consequences.** Tier 1 makes accidental exposure hard. It does **not** stop a
 determined same-user process: DPAPI-CurrentUser is decryptable by anything
-running as the user. Tier 2 (a broker that performs the outbound call, so the
-key never enters an agent-controlled process) is the only true guarantee; it is
-out of scope for v0.1.
+running as the user. Tier 2 is `vkeys-broker` (OpenRouter only, 2026-10-28): the
+provider key stays in the broker and never enters the client. It is still not a
+general secret server.
 
 **Rejected.** `secret get` (violates the rule), `export-env` (dumps values into
 a shell), LocalMachine DPAPI (any process/SYSTEM can decrypt), hashing instead of

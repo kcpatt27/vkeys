@@ -54,9 +54,8 @@ spend caps. This makes accidental/drive-by exposure very hard.
 
 Honest boundary: `vault.bin` is DPAPI **CurrentUser**. It stops other Windows
 accounts and disk theft, but any process running as you — including an agent —
-can decrypt it with a small script. Tier 2 (a local broker that makes the call
-server-side, so the key never enters an agent-controlled process) is the only
-true "cannot see it". Not built yet; see `DECISIONS.md`.
+can decrypt it with a small script. Tier 2 is `vkeys-broker`: the provider key
+stays in the broker process and never enters the client. See `docs/BROKER.md`.
 
 ## Store
 
@@ -65,32 +64,36 @@ true "cannot see it". Not built yet; see `DECISIONS.md`.
 - Audit: `audit.jsonl` next to the vault.
 - Crypto: Windows DPAPI, current user. Encrypted per value; metadata is plaintext.
 
-## Dev
+## Tier 2
 
-```powershell
-uv sync
-python -m unittest discover -s tests -v
-uv tool install .            # puts vkeys.exe on PATH (.local\bin)
-```
+`vkeys-broker` is a local OpenRouter proxy (Rust, default build): it holds the
+provider key, clients authenticate with a separate broker token, and only
+non-streaming `POST /v1/chat/completions` plus `GET /healthz` are exposed. See
+`docs/BROKER.md`.
 
-## Rust port (feat/rust-port)
-
-A Rust implementation of the same CLI lives in `rust/`. **The Python
-implementation is still the default**; the Rust binary is only
-`rust/target/release/vkeys.exe` on this branch. Behavior, vault format, and
-the no-`get` rule are shared.
+## Install (Rust is the default)
 
 ```powershell
 cd rust
-cargo build --release        # build the Rust binary
-cargo test --release         # interop matrix (python <-> rust)
+cargo build --release
+$bin = "$env:USERPROFILE\.local\bin"
+Copy-Item target\release\vkeys.exe        "$bin\vkeys.exe" -Force
+Copy-Item target\release\vkeys-broker.exe "$bin\vkeys-broker.exe" -Force
+```
 
-# from the repo root:
-pwsh parity/run.ps1          # prints PARITY n/N, nonzero on any diff
+Python remains in `src/` as the parity oracle; it is not installed.
+
+## Tests
+
+```powershell
+cd rust
+cargo test --release        # CLI + interop + 7 broker tests
+cd ..
+pwsh parity/run.ps1         # PARITY n/N (Python <-> Rust)
 ```
 
 The parity harness uses temp vaults and temp profiles only. See `PORT.md` for
-the port card, the interop matrix, and every documented deviation.
+the port card and documented deviations.
 
 Rust-only addition: `set`/`rotate` take `--stdin` for scripted provisioning
 (`printf '%s' "$KEY" | vkeys set --stdin name`). Without a TTY and without

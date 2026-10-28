@@ -1,7 +1,8 @@
 # vkeys — Python → Rust port
 
-Branch: `feat/rust-port`. **Python is still the default implementation.** Nothing
-here is merged to `main`, and the Python source is untouched.
+**Flipped 2026-10-28.** Rust is the installed default (`vkeys.exe` +
+`vkeys-broker.exe` in `%USERPROFILE%\.local\bin`). Python is retained in `src/`
+as the parity oracle.
 
 ## Port card
 
@@ -20,8 +21,8 @@ Slices:       1 dpapi (OS edge) -> 2 vault reader/writer -> 3 profiles/scrub/
               audit -> 4 CLI/argv/exit -> 5 child process/env/scrub -> 6 none ->
               7 Windows edges (DPAPI, merged pipe, ppid, icacls, local time)
 Deviations:   D2-D8 below, each with a reason and a local ticket id
-Swap:         real workload passed 2026-10-27 (see "Swap evidence"). Python is
-              still default; the rename/flip is the remaining step.
+Swap:         done 2026-10-28; real workload passed 2026-10-27 (see "Swap
+              evidence"). Rust binaries installed; Python is the oracle.
 ```
 
 ## Build
@@ -90,6 +91,14 @@ vkeys.exe ls                           -> 3 entries; meridian uses=2
 write in one go. The three stores were then readable by the Python build
 (interop matrix), so the swap is no longer blocked on behavior.
 
+## Tier 2 broker (Rust)
+
+`src/broker.rs` + `src/broker_main.rs` port `src/vkeys/broker.py` 1:1:
+OpenRouter chat-completions only, broker-token auth, in-memory budget, one audit
+line per request, no streaming, no prompt/completion text in logs. `cargo test
+--release` runs 7 broker tests against a local fake upstream (mirroring
+`tests/test_broker.py`); no live provider call.
+
 ## Deviations
 
 | id | deviation | reason |
@@ -125,6 +134,8 @@ used by `env`/`run`/`selfcheck`, exactly like Python's `Vault.get`.
 | toml | 0.8.23 (`preserve_order`) | profile parsing; document order is user-visible in `env`. Pulls `indexmap` transitively. |
 | base64 | 0.22.1 | vault `ct` encoding |
 | windows | 0.62.2 | DPAPI (`Win32_Security_Cryptography`), Toolhelp (ppid), pipes (merged child stdout/stderr), `GetLocalTime` |
+| tiny_http | 0.12 | broker HTTP server (Tier 2) |
+| ureq | 2.12.1 | broker upstream HTTPS client (Tier 2) |
 | rpassword | 7.5.4 | hidden input on a real console |
 | arboard | 3.7.0, `default-features = false` | text-only clipboard read for `--clipboard`; the default feature would pull the `image` stack |
 
@@ -140,4 +151,5 @@ runtime dependency.
   not compared.
 - Malformed vault/profile files exit 1 in both, with different stderr text (D4).
 - TTY-only confirmations are not exercised (D8).
-- Performance, CI, new commands, and a swap/rename release are out of scope.
+- Tier 2 is one provider (OpenRouter) and non-streaming; no per-client budgets.
+- Performance and CI are out of scope.

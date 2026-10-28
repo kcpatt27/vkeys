@@ -1,6 +1,6 @@
 # vkeys-broker - Tier 2 OpenRouter broker
 
-**Status:** tracer, 2026-10-28.
+**Status:** Tier 2, Rust default since 2026-10-28 (Python oracle retained).
 **Purpose:** keep the OpenRouter provider key out of every client/agent process.
 Clients authenticate to the broker with a separate broker token; only the broker
 holds the provider key.
@@ -88,6 +88,10 @@ the broker token together; do not expose the port publicly.
 ## Tests
 
 ```powershell
+cd rust
+cargo test --release          # 7 broker tests, local fake upstream
+# Python oracle:
+cd ..
 uv run python -m unittest discover -s tests -q
 ```
 
