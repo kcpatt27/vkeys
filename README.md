@@ -81,19 +81,23 @@ Copy-Item target\release\vkeys.exe        "$bin\vkeys.exe" -Force
 Copy-Item target\release\vkeys-broker.exe "$bin\vkeys-broker.exe" -Force
 ```
 
-Python remains in `src/` as the parity oracle; it is not installed.
+The Python oracle is archived at tag `python-oracle-final`; `PORT.md` is its record.
 
 ## Tests
 
 ```powershell
 cd rust
 cargo test --release        # CLI + interop + 7 broker tests
-cd ..
-pwsh parity/run.ps1         # PARITY n/N (Python <-> Rust)
 ```
 
-The parity harness uses temp vaults and temp profiles only. See `PORT.md` for
-the port card and documented deviations.
+See `PORT.md` (historical) for the Python parity record.
+
+## Roadmap
+
+- macOS Keychain + Linux Secret Service backends (Rust-only).
+- Portable vault file: one encrypted format, master key wrapped by the OS keychain.
+- Broker: per-client tokens + per-client budgets; optional SSE pass-through.
+- Broker lifecycle: logon scheduled task + tray (status/start/stop).
 
 Rust-only addition: `set`/`rotate` take `--stdin` for scripted provisioning
 (`printf '%s' "$KEY" | vkeys set --stdin name`). Without a TTY and without

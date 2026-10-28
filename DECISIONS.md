@@ -31,3 +31,24 @@ general secret server.
 **Rejected.** `secret get` (violates the rule), `export-env` (dumps values into
 a shell), LocalMachine DPAPI (any process/SYSTEM can decrypt), hashing instead of
 encryption (can't inject the real key).
+
+## ADR-0002 — Rust-only main; oracle archived; portable vault later
+
+**Status:** accepted (2026-10-28).
+
+**Decision.**
+
+1. Rust is the only implementation on `main`. The Python implementation was
+   removed and is preserved at tag `python-oracle-final` (commit `80847db`);
+   `PORT.md` is the historical record.
+2. A **portable vault file** is a planned direction: one encrypted file format
+   across OSes, with the master key wrapped by the platform keychain (Windows
+   DPAPI / macOS Keychain / Linux Secret Service). Not built yet.
+3. **Per-client broker budgets** are wanted later, but require per-client tokens
+   or identities first; deferred.
+4. macOS and Linux get native store backends behind the same trait; the broker
+   (`tiny_http`/`ureq`) is already portable.
+
+**Consequences.** `main` is Rust-only; contributors do not maintain two
+implementations. The archived tag remains the reference for the Python parity
+harness.

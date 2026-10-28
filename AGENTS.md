@@ -25,8 +25,9 @@ Personal, machine-wide key store (`vkeys` = virtual keys). See `README.md` and
 
 ```powershell
 cd rust; cargo test --release
-cd ..; pwsh parity/run.ps1
-vkeys selfcheck
+cd ..; vkeys selfcheck
 ```
+
+The Python oracle is archived at tag `python-oracle-final`.
 
 A merge that lands red is not merged.

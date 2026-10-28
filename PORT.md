@@ -1,5 +1,9 @@
 # vkeys — Python → Rust port
 
+> **Archived oracle:** the Python implementation was removed from `main` on
+> 2026-10-28 and is preserved at tag `python-oracle-final`. This document is
+> the historical port record; `parity/` lives in that tag.
+
 **Flipped 2026-10-28.** Rust is the installed default (`vkeys.exe` +
 `vkeys-broker.exe` in `%USERPROFILE%\.local\bin`). Python is retained in `src/`
 as the parity oracle.
@@ -35,7 +39,7 @@ cargo build --release        # -> rust/target/release/vkeys.exe
 ## Parity
 
 ```powershell
-pwsh parity/run.ps1          # prints PARITY n/N; nonzero on any diff
+pwsh parity/run.ps1          # (tag python-oracle-final) prints PARITY n/N
 ```
 
 The harness runs both implementations on **temp vaults and temp profiles only**.

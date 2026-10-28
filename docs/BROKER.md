@@ -90,9 +90,6 @@ the broker token together; do not expose the port publicly.
 ```powershell
 cd rust
 cargo test --release          # 7 broker tests, local fake upstream
-# Python oracle:
-cd ..
-uv run python -m unittest discover -s tests -q
 ```
 
 The broker tests use a local fake upstream. They never read the real vault,
