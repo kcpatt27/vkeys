@@ -60,11 +60,15 @@ Normalised nondeterminism, and nothing else: timestamps (`<TS>`), parent pid
 (`<TMP>`). DPAPI includes a random salt, so vault files can never be
 byte-identical; the real oracle is the interop matrix below.
 
-## Interop matrix
+## Interop matrix (historical — tag `python-oracle-final`)
+
+These cross-implementation tests need the Python oracle, which is no longer on
+`main`; they live in the archive tag. `main` runs the Rust CLI-contract and
+broker tests.
 
 ```powershell
 cd rust
-cargo test --release         # 3 interop + 3 CLI-contract tests
+cargo test --release         # 3 CLI-contract + 7 broker tests
 ```
 
 - `python_vault_read_by_rust` — Python writes a vault (plain, unicode, empty

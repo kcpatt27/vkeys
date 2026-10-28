@@ -87,7 +87,7 @@ The Python oracle is archived at tag `python-oracle-final`; `PORT.md` is its rec
 
 ```powershell
 cd rust
-cargo test --release        # CLI + interop + 7 broker tests
+cargo test --release        # CLI + 7 broker tests
 ```
 
 See `PORT.md` (historical) for the Python parity record.
