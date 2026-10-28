@@ -7,6 +7,7 @@ dependencies = []
 
 [project.scripts]
 vkeys = "vkeys.cli:main"
+vkeys-broker = "vkeys.broker:main"
 
 [build-system]
 requires = ["hatchling"]

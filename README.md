@@ -22,7 +22,11 @@ vkeys selfcheck                      # runnable check
 ```
 
 **There is no `vkeys get`.** If you need to see a key, make a new one. That is
-the point — it is a feature, not a missing command.
+the point - it is a feature, not a missing command.
+
+Tier 2 is available as `vkeys-broker`: a local OpenRouter proxy that holds the
+provider key and authenticates clients with a separate broker token. See
+`docs/BROKER.md`.
 
 ## Profiles
 
