@@ -1,4 +1,5 @@
-# Copy to %APPDATA%\vkeys\profiles.toml and edit.
+# Copy to %APPDATA%\vkeys\profiles.toml (macOS/Linux: the platform config dir)
+# and edit. Paths below are Windows examples; use your OS paths.
 # keys map ENV_NAME = store-name (see `vkeys ls`).
 
 [profile.meridian]

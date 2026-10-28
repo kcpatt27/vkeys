@@ -13,8 +13,9 @@ able to *see* it, and there should be no easy command that reveals one.
 1. **Name `vkeys`** ("virtual keys"). `keys` is too generic (collides with npm
    helpers and future platform tooling); `secret`/`vault` are generic too. For a
    local `uv tool` only PATH matters.
-2. **Store:** `C:\ProgramData\secrets\vault.bin`, DPAPI **CurrentUser** scope
-   (not LocalMachine). Encrypted per value; metadata plaintext.
+2. **Store:** `C:\ProgramData\secrets\vault.bin` on Windows, DPAPI **CurrentUser**
+   scope (not LocalMachine). macOS/Linux use the platform data dir and
+   XChaCha20-Poly1305 (ADR-0003). Encrypted per value; metadata plaintext.
 3. **No `get`.** Values are write-only. Seeing one requires making a new one.
 4. **Profiles, not generic injection.** `keys` in a profile map env names to
    store names; `cmd` is fixed; `agent-ok` gates non-interactive use.
@@ -46,9 +47,25 @@ encryption (can't inject the real key).
    DPAPI / macOS Keychain / Linux Secret Service). Not built yet.
 3. **Per-client broker budgets** are wanted later, but require per-client tokens
    or identities first; deferred.
-4. macOS and Linux get native store backends behind the same trait; the broker
+4. macOS and Linux native store backends landed 2026-10-28 (ADR-0003); the broker
    (`tiny_http`/`ureq`) is already portable.
 
 **Consequences.** `main` is Rust-only; contributors do not maintain two
 implementations. The archived tag remains the reference for the Python parity
 harness.
+
+## ADR-0003 — Cross-platform storage
+
+**Status:** accepted (2026-10-28).
+
+**Decision.** Windows keeps per-value DPAPI (`scheme = "dpapi"`) so existing
+vaults keep working. macOS and Linux use XChaCha20-Poly1305 (`scheme =
+"xchacha20poly1305"`) with a 32-byte master key held in the OS credential store
+(Keychain / Secret Service) through the `keyring` crate. Entries carry a
+`scheme`; a missing scheme means `dpapi`. A DPAPI entry opened on macOS/Linux
+errors with "open it on Windows to migrate".
+
+**Consequences.** The same binary builds on all three platforms; the vault file
+is portable once the master key is present on the target machine. Master-key
+export/import (the last step for a truly portable vault) is still future.
+DPAPI entries are not readable off Windows without a migration step.

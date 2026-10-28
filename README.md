@@ -1,8 +1,8 @@
 # vkeys — virtual keys
 
-Personal, machine-wide key store for this PC. Keys are stored once, encrypted at
-rest, and **injected into named profiles** — an agent can *use* a key but has no
-command that prints it.
+Personal, machine-wide key store for Windows, macOS, and Linux. Keys are stored
+once, encrypted at rest, and **injected into named profiles** — an agent can
+*use* a key but has no command that prints it.
 
 Name: **vkeys** = "virtual keys". Deliberately not `keys` / `secret` / `vault`
 (see `DECISIONS.md`).
@@ -59,10 +59,17 @@ stays in the broker process and never enters the client. See `docs/BROKER.md`.
 
 ## Store
 
-- Vault: `C:\ProgramData\secrets\vault.bin` (overridable with `--vault` or
-  `VKEYS_VAULT`).
-- Audit: `audit.jsonl` next to the vault.
-- Crypto: Windows DPAPI, current user. Encrypted per value; metadata is plaintext.
+- **Vault:** Windows `C:\ProgramData\secrets\vault.bin`; macOS
+  `~/Library/Application Support/vkeys/vault.bin`; Linux
+  `$XDG_DATA_HOME/vkeys/vault.bin` (or `~/.local/share/vkeys/vault.bin`).
+  Override with `--vault`, `VKEYS_VAULT`, or `VKEYS_DATA_DIR`.
+- **Profiles:** Windows `%APPDATA%\vkeys\profiles.toml`; macOS
+  `~/Library/Application Support/vkeys/profiles.toml`; Linux
+  `$XDG_CONFIG_HOME/vkeys/profiles.toml` (or `~/.config/vkeys/profiles.toml`).
+- **Audit:** `audit.jsonl` next to the vault.
+- **Crypto:** Windows per-value DPAPI (compat) or XChaCha20-Poly1305;
+  macOS/Linux XChaCha20-Poly1305 with the 32-byte master key in Keychain /
+  Secret Service. Metadata is plaintext.
 
 ## Tier 2
 
@@ -81,6 +88,12 @@ Copy-Item target\release\vkeys.exe        "$bin\vkeys.exe" -Force
 Copy-Item target\release\vkeys-broker.exe "$bin\vkeys-broker.exe" -Force
 ```
 
+```bash
+# macOS / Linux
+cargo build --release
+install -m 755 target/release/vkeys target/release/vkeys-broker ~/.local/bin/
+```
+
 The Python oracle is archived at tag `python-oracle-final`; `PORT.md` is its record.
 
 ## Tests
@@ -94,8 +107,7 @@ See `PORT.md` (historical) for the Python parity record.
 
 ## Roadmap
 
-- macOS Keychain + Linux Secret Service backends (Rust-only).
-- Portable vault file: one encrypted format, master key wrapped by the OS keychain.
+- Portable vault file: master-key export/import so a vault moves between machines.
 - Broker: per-client tokens + per-client budgets; optional SSE pass-through.
 - Broker lifecycle: logon scheduled task + tray (status/start/stop).
 

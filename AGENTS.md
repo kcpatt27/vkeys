@@ -3,7 +3,7 @@
 ## What this is
 
 Personal, machine-wide key store (`vkeys` = virtual keys). See `README.md` and
-`DECISIONS.md`. Windows-only (DPAPI).
+`DECISIONS.md`. Windows, macOS, and Linux (DPAPI / Keychain / Secret Service).
 
 ## Non-negotiables
 

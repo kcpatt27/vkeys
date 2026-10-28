@@ -5,12 +5,6 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use windows::Win32::Foundation::CloseHandle;
-use windows::Win32::System::Diagnostics::ToolHelp::{
-    CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
-};
-use windows::Win32::System::SystemInformation::GetLocalTime;
-
 // Base env a child legitimately needs; everything else is dropped.
 pub const KEEP: [&str; 23] = [
     "PATH",
@@ -42,29 +36,51 @@ pub fn default_profiles() -> PathBuf {
     if let Ok(v) = std::env::var("VKEYS_PROFILES") {
         return PathBuf::from(v);
     }
-    let home = std::env::var("APPDATA")
-        .ok()
-        .map(PathBuf::from)
-        .or_else(|| std::env::var("USERPROFILE").ok().map(PathBuf::from))
-        .or_else(
-            || match (std::env::var("HOMEDRIVE"), std::env::var("HOMEPATH")) {
-                (Ok(d), Ok(p)) => Some(PathBuf::from(format!("{d}{p}"))),
-                _ => None,
-            },
-        )
-        .unwrap_or_else(|| PathBuf::from("."));
-    home.join("vkeys").join("profiles.toml")
+    #[cfg(windows)]
+    {
+        let base = std::env::var("APPDATA")
+            .ok()
+            .map(PathBuf::from)
+            .or_else(|| std::env::var("USERPROFILE").ok().map(PathBuf::from))
+            .unwrap_or_else(|| PathBuf::from("."));
+        return base.join("vkeys").join("profiles.toml");
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return crate::vault::home_dir()
+            .join("Library")
+            .join("Application Support")
+            .join("vkeys")
+            .join("profiles.toml");
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+            return PathBuf::from(xdg).join("vkeys").join("profiles.toml");
+        }
+        return crate::vault::home_dir()
+            .join(".config")
+            .join("vkeys")
+            .join("profiles.toml");
+    }
+    #[allow(unreachable_code)]
+    PathBuf::from("profiles.toml")
 }
 
 pub fn now() -> String {
-    let t = unsafe { GetLocalTime() };
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
-        t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond
-    )
+    chrono::Local::now()
+        .format("%Y-%m-%dT%H:%M:%S")
+        .to_string()
 }
 
+#[cfg(windows)]
 pub fn ppid() -> u32 {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+
     unsafe {
         let Ok(snap) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else {
             return 0;
@@ -89,6 +105,11 @@ pub fn ppid() -> u32 {
         let _ = CloseHandle(snap);
         parent
     }
+}
+
+#[cfg(unix)]
+pub fn ppid() -> u32 {
+    unsafe { libc::getppid() as u32 }
 }
 
 // -- Python string semantics ------------------------------------------------

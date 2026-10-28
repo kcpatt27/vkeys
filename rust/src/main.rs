@@ -1,13 +1,17 @@
 //! vkeys CLI. No command prints a stored value.
 
+#[cfg(windows)]
 mod dpapi;
+mod crypto;
 mod proc;
 mod runtime;
+mod secret;
 mod vault;
 
 use std::fs;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
+#[cfg(windows)]
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -201,6 +205,7 @@ fn cmd_init(vault_path: &Path, profiles_path: &Path) -> i32 {
     if let Err(e) = fs::create_dir_all(&directory) {
         return fail(&format!("{}: {e}", directory.display()));
     }
+    #[cfg(windows)]
     if created {
         let user = std::env::var("USERNAME").unwrap_or_default();
         let _ = Command::new("icacls")
@@ -211,6 +216,11 @@ fn cmd_init(vault_path: &Path, profiles_path: &Path) -> i32 {
             .arg("/grant:r")
             .arg("*S-1-5-32-544:(OI)(CI)F")
             .output();
+    }
+    #[cfg(unix)]
+    if created {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&directory, fs::Permissions::from_mode(0o700));
     }
     let vault = match open_vault(vault_path) {
         Ok(v) => v,

@@ -1,4 +1,5 @@
-//! Encrypted value store. Metadata is plaintext; values are DPAPI blobs.
+//! Encrypted value store. Metadata is plaintext; values are platform-encrypted
+//! blobs (DPAPI on Windows, XChaCha20-Poly1305 elsewhere).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -7,7 +8,7 @@ use base64::Engine;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
-use crate::dpapi;
+use crate::crypto;
 
 #[derive(Serialize, Deserialize)]
 struct VaultFile {
@@ -18,6 +19,9 @@ struct VaultFile {
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct Entry {
     pub ct: String,
+    /// Missing on pre-2026-10-28 entries: those are DPAPI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheme: Option<String>,
     #[serde(default)]
     pub set_at: Option<String>,
     #[serde(default)]
@@ -93,11 +97,12 @@ impl Vault {
     }
 
     pub fn set(&mut self, name: &str, value: &str) -> Result<(), String> {
-        let blob = dpapi::protect(value.as_bytes())?;
+        let (scheme, blob) = crypto::protect(value.as_bytes())?;
         self.data.entries.insert(
             name.to_string(),
             Entry {
                 ct: base64::engine::general_purpose::STANDARD.encode(blob),
+                scheme: Some(scheme.to_string()),
                 set_at: Some(crate::runtime::now()),
                 last_used: None,
                 uses: 0,
@@ -116,7 +121,8 @@ impl Vault {
         let blob = base64::engine::general_purpose::STANDARD
             .decode(entry.ct.as_bytes())
             .map_err(|e| format!("{name}: invalid ciphertext: {e}"))?;
-        let plain = dpapi::unprotect(&blob)?;
+        let scheme = entry.scheme.as_deref().unwrap_or(crypto::DPAPI);
+        let plain = crypto::unprotect(scheme, &blob)?;
         String::from_utf8(plain).map_err(|e| format!("{name}: invalid utf-8: {e}"))
     }
 
@@ -130,10 +136,46 @@ impl Vault {
     }
 }
 
+#[allow(dead_code)]
+pub fn home_dir() -> PathBuf {
+    std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."))
+}
+
+/// Directory holding `vault.bin` and `audit.jsonl`.
+pub fn data_dir() -> PathBuf {
+    if let Ok(v) = std::env::var("VKEYS_DATA_DIR") {
+        return PathBuf::from(v);
+    }
+    #[cfg(windows)]
+    {
+        let base = std::env::var("PROGRAMDATA").unwrap_or_else(|_| r"C:\ProgramData".to_string());
+        return PathBuf::from(base).join("secrets");
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return home_dir()
+            .join("Library")
+            .join("Application Support")
+            .join("vkeys");
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
+            return PathBuf::from(xdg).join("vkeys");
+        }
+        return home_dir().join(".local").join("share").join("vkeys");
+    }
+    #[allow(unreachable_code)]
+    PathBuf::from(".")
+}
+
 pub fn default_vault() -> PathBuf {
     match std::env::var("VKEYS_VAULT") {
         Ok(v) => PathBuf::from(v),
-        Err(_) => PathBuf::from(r"C:\ProgramData\secrets\vault.bin"),
+        Err(_) => data_dir().join("vault.bin"),
     }
 }
 

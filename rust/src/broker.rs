@@ -15,7 +15,6 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
-use windows::Win32::System::SystemInformation::GetLocalTime;
 
 pub const DEFAULT_UPSTREAM: &str = "https://openrouter.ai/api/v1";
 pub const MAX_BODY: usize = 10_000_000;
@@ -56,18 +55,51 @@ impl State {
 }
 
 pub fn default_audit() -> PathBuf {
-    let program_data = std::env::var("PROGRAMDATA").unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(program_data)
-        .join("secrets")
-        .join("broker-audit.jsonl")
+    if let Ok(v) = std::env::var("VKEYS_DATA_DIR") {
+        return PathBuf::from(v).join("broker-audit.jsonl");
+    }
+    #[cfg(windows)]
+    {
+        let base = std::env::var("PROGRAMDATA").unwrap_or_else(|_| r"C:\ProgramData".to_string());
+        return PathBuf::from(base)
+            .join("secrets")
+            .join("broker-audit.jsonl");
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return home_dir()
+            .join("Library")
+            .join("Application Support")
+            .join("vkeys")
+            .join("broker-audit.jsonl");
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
+            return PathBuf::from(xdg).join("vkeys").join("broker-audit.jsonl");
+        }
+        return home_dir()
+            .join(".local")
+            .join("share")
+            .join("vkeys")
+            .join("broker-audit.jsonl");
+    }
+    #[allow(unreachable_code)]
+    PathBuf::from("broker-audit.jsonl")
+}
+
+#[allow(dead_code)]
+fn home_dir() -> PathBuf {
+    std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."))
 }
 
 pub fn local_timestamp() -> String {
-    let t = unsafe { GetLocalTime() };
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
-        t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond
-    )
+    chrono::Local::now()
+        .format("%Y-%m-%dT%H:%M:%S")
+        .to_string()
 }
 
 #[allow(clippy::too_many_arguments)]

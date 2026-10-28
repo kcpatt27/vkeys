@@ -3,6 +3,11 @@
 //! Deviation D3: the Python build's `getpass` ignores a pipe (and hangs on
 //! one), so the Rust build makes stdin explicit with `--stdin`. These checks
 //! pin that contract; parity with Python is covered by parity/parity.py.
+//!
+//! Windows-only: these exercise the DPAPI-backed CLI end to end. The
+//! cross-platform unit tests (crypto, broker) run everywhere.
+
+#![cfg(windows)]
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
