@@ -1,11 +1,14 @@
+import json
 import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from vkeys.cli import main  # noqa: E402
 from vkeys.runtime import clean_env, load_profiles, scrub  # noqa: E402
 from vkeys.vault import Vault  # noqa: E402
 
@@ -29,6 +32,42 @@ class VaultTests(unittest.TestCase):
             self.assertEqual(vault.meta("k")["uses"], 1)
             self.assertTrue(vault.remove("k"))
             self.assertEqual(vault.names(), [])
+
+    def test_human_only_confirmation_failure_is_audited(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            vault = Vault(root / "vault.bin")
+            vault.set("k", "s3cret-value-123")
+            profiles = root / "profiles.toml"
+            profiles.write_text(
+                '[profile.human]\ncmd = ["cmd"]\nagent-ok = false\n'
+                '[profile.human.keys]\nK = "k"\n',
+                encoding="utf-8",
+            )
+
+            with patch("sys.stdin.isatty", return_value=True), patch(
+                "builtins.input", return_value="wrong"
+            ):
+                code = main(
+                    [
+                        "--vault",
+                        str(root / "vault.bin"),
+                        "--profiles",
+                        str(profiles),
+                        "run",
+                        "human",
+                    ]
+                )
+
+            self.assertEqual(code, 2)
+            events = [
+                json.loads(line)
+                for line in (root / "audit.jsonl").read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(events[-1]["cmd"], "refuse")
+            self.assertEqual(events[-1]["profile"], "human")
+            self.assertEqual(events[-1]["reason"], "human-only, confirmation failed")
 
 
 class RuntimeTests(unittest.TestCase):
