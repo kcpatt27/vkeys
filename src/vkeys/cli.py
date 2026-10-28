@@ -160,6 +160,16 @@ def cmd_run(args) -> int:
         except (EOFError, KeyboardInterrupt):
             typed = ""
         if typed.strip() != args.profile:
+            audit(
+                {
+                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "cmd": "refuse",
+                    "profile": args.profile,
+                    "reason": "human-only, confirmation failed",
+                    "ppid": os.getppid(),
+                },
+                _audit_path(args),
+            )
             print("aborted (confirmation required for a human-only profile)", file=sys.stderr)
             return 2
     for store in prof["keys"].values():
