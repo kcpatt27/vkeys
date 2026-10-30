@@ -1,5 +1,7 @@
 # vkeys — virtual keys
 
+[![ci](https://github.com/kcpatt27/vkeys/actions/workflows/ci.yml/badge.svg)](https://github.com/kcpatt27/vkeys/actions/workflows/ci.yml)
+
 Personal, machine-wide key store for Windows, macOS, and Linux. Keys are stored
 once, encrypted at rest, and **injected into named profiles** — an agent can
 *use* a key but has no command that prints it.
