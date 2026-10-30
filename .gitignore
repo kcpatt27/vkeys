@@ -4,3 +4,8 @@ __pycache__/
 profiles.toml
 .scratch/
 rust/target/
+demo/demo-vault.bin
+demo/audit.jsonl
+demo/out/
+demo/teaser/node_modules/
+demo/teaser/out/

@@ -1,0 +1,20 @@
+{
+  "name": "vkeys-demo",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render:terminal": "remotion render src/index.ts TerminalDemo out/terminal.mp4",
+    "render:teaser": "remotion render src/index.ts Teaser out/teaser.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.12",
+    "typescript": "5.6.3"
+  }
+}
