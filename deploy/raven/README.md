@@ -23,8 +23,10 @@ It will:
 6. enable and start `vkeys-broker`;
 7. verify `GET /healthz`.
 
-The only interactions are `sudo` and the hidden provider-key prompt. Re-running
-is idempotent; an existing provider key and token are left alone.
+The only interactions are `sudo` and the hidden provider-key prompt. For a
+non-interactive run, put the provider key in a root-only file and set
+`VKEYS_PROVIDER_KEY_FILE`; the broker token is still generated. Re-running is
+idempotent; an existing provider key and token are left alone.
 
 ## Verify the boundary
 
