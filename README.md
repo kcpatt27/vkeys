@@ -74,6 +74,9 @@ stays in the broker process and never enters the client. See `docs/BROKER.md`.
 - **Crypto:** Windows per-value DPAPI (compat) or XChaCha20-Poly1305;
   macOS/Linux XChaCha20-Poly1305 with the 32-byte master key in Keychain /
   Secret Service. Metadata is plaintext.
+- **Headless Linux / Pi:** no Secret Service? The master key falls back to
+  `~/.config/vkeys/master.key` (0600). Set `VKEYS_MASTER_KEY_FILE` to pin it.
+  See [`docs/PI.md`](docs/PI.md).
 
 ## Tier 2
 

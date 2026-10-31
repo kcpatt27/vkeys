@@ -14,6 +14,9 @@ or a bypass.
 - The OS-user boundary stops other accounts and disk theft. It does **not** stop
   a process running as the same user: such a process can ask the OS to decrypt,
   and a Windows DPAPI vault can be decrypted without going through `vkeys`.
+- On headless Linux without a Secret Service, the master key is a `0600` file
+  (`~/.config/vkeys/master.key`). Same-user processes can read it; that is the
+  documented trade for unattended operation.
 - vkeys makes accidental exposure hard, not impossible: no `get`, profiles with
   fixed `argv`, a clean child environment, output scrubbing, and an audit log.
   It is not a sandbox.
