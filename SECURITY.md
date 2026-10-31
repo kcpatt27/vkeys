@@ -17,6 +17,10 @@ or a bypass.
 - On headless Linux without a Secret Service, the master key is a `0600` file
   (`~/.config/vkeys/master.key`). Same-user processes can read it; that is the
   documented trade for unattended operation.
+- **Strong boundary:** run the Tier 2 broker as a different OS user (Linux
+  `vkeys` system user; Windows service account) with the vault/key readable only
+  by that user. The agent's user cannot decrypt; it holds a use-only token. See
+  `deploy/raven/`.
 - vkeys makes accidental exposure hard, not impossible: no `get`, profiles with
   fixed `argv`, a clean child environment, output scrubbing, and an audit log.
   It is not a sandbox.

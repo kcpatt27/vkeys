@@ -1,0 +1,27 @@
+[Unit]
+Description=vkeys OpenRouter broker (Tier 2, dedicated user)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vkeys
+Group=vkeys
+StateDirectory=vkeys
+StateDirectoryMode=0700
+ConfigurationDirectory=vkeys
+ConfigurationDirectoryMode=0700
+Environment=VKEYS_VAULT=/var/lib/vkeys/vault.bin
+Environment=VKEYS_MASTER_KEY_FILE=/etc/vkeys/master.key
+Environment=VKEYS_PROFILES=/etc/vkeys/profiles.toml
+ExecStart=/usr/local/bin/vkeys run openrouter-broker
+Restart=always
+RestartSec=3
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

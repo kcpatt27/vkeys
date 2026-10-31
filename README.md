@@ -61,6 +61,11 @@ accounts and disk theft, but any process running as you â€” including an agent â
 can decrypt it with a small script. Tier 2 is `vkeys-broker`: the provider key
 stays in the broker process and never enters the client. See `docs/BROKER.md`.
 
+**The strong boundary is a separate OS user.** Run the broker as a dedicated user
+(Linux `vkeys` system user; Windows a service account) with the vault and key
+readable only by that user. The agent's user then cannot decrypt the vault at
+all; it gets a use-only broker token. See [`deploy/raven/`](deploy/raven/).
+
 ## Store
 
 - **Vault:** Windows `C:\ProgramData\secrets\vault.bin`; macOS

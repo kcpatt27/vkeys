@@ -39,33 +39,29 @@ Without `VKEYS_MASTER_KEY_FILE`, vkeys tries the Secret Service and falls back t
 the same path when no provider is present. The file is created atomically with
 `0600`.
 
-## systemd (broker, set-and-forget)
+## Moving a vault from Windows
 
-`~/.config/systemd/user/vkeys-broker.service`:
+Copying `vault.bin` moves metadata only. Windows entries are DPAPI and cannot be
+decrypted on Linux. Re-enter the values on the Pi (`vkeys set ...`) or use the PC
+broker over the tailnet. The Pi's own vault starts empty.
 
-```ini
-[Unit]
-Description=vkeys OpenRouter broker
+## systemd (broker, hardened)
 
-[Service]
-Environment=VKEYS_MASTER_KEY_FILE=%h/.config/vkeys/master.key
-ExecStart=%h/.local/bin/vkeys run openrouter-broker
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=default.target
-```
+Use `deploy/raven/install.sh`: it creates a dedicated **`vkeys` system user**,
+installs the binaries, and enables `deploy/raven/vkeys-broker.service`. The vault
+(`/var/lib/vkeys`) and key (`/etc/vkeys/master.key`) are readable only by
+`vkeys`; the agent user (`kcpat`) cannot decrypt them and only gets
+`broker/token`.
 
 ```bash
-systemctl --user daemon-reload
-systemctl --user enable --now vkeys-broker
-systemctl --user status vkeys-broker
+sudo ./deploy/raven/install.sh "$PWD/rust/target/release"
+# seed openrouter/broker + broker/token as the vkeys user, then:
+sudo systemctl enable --now vkeys-broker
+curl -s http://127.0.0.1:8787/healthz
 ```
 
-The `openrouter-broker` profile and its two keys must exist in the Pi's vault
-first (`openrouter/broker`, `broker/token`). Keep the broker on loopback or the
-tailnet; never expose it publicly.
+A `systemd --user` unit as `kcpat` is fine for a quick test but is **not** a
+boundary against an agent running as `kcpat`. See [`deploy/raven/`](../deploy/raven/).
 
 ## Security boundary
 
