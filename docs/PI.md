@@ -4,6 +4,10 @@ Raven-class target: Debian 13 (trixie), aarch64, no Secret Service provider.
 vkeys is happy there, but the master key must come from a **0600 key file**
 instead of the OS keychain.
 
+**Verified 2026-10-31 on Raven:** Debian 13, aarch64, Rust 1.99.1; native
+build 2m43s; `set`/`ls`/`env`/`run`/`audit`; key file `0600`; `[REDACTED]` and
+`scrub_hits: 1` confirmed.
+
 ## Build natively (recommended for the Pi)
 
 ```bash

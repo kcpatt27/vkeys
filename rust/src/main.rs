@@ -573,7 +573,7 @@ fn cmd_selfcheck() -> i32 {
     let _ = fs::remove_dir_all(&dir);
     match result {
         Ok(()) => {
-            emit_out("selfcheck ok: dpapi roundtrip, no plaintext, scrub, profile parse\n");
+            emit_out("selfcheck ok: crypto roundtrip, no plaintext, scrub, profile parse\n");
             0
         }
         Err(e) => fail(&e),

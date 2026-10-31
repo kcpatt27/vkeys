@@ -1,0 +1,6 @@
+[profile.demo]
+cmd = ["sh", "-c", "echo $DEMO_KEY"]
+agent-ok = true
+
+[profile.demo.keys]
+DEMO_KEY = "demo/key"

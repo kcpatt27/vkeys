@@ -8,6 +8,8 @@
     agent pane.
 - `demo-profiles.toml` — fake profile used by the terminal demo
   (`cmd /c echo %DEMO_KEY%`, Windows).
+- `demo-profiles-linux.toml` — the same demo for Linux/macOS
+  (`sh -c 'echo $DEMO_KEY'`).
 
 VHS was tried first and hangs without a PTY on this machine, so the terminal
 demo is rendered from the same real output instead of a live cast.
