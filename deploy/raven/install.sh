@@ -9,6 +9,9 @@
 #
 # The agent user cannot read /etc/vkeys or /var/lib/vkeys. It only gets
 # ~/.config/vkeys/broker.token (use-only).
+#
+# Non-interactive: set VKEYS_PROVIDER_KEY_FILE to a root-only file containing
+# the provider key; the broker token is always generated.
 
 set -euo pipefail
 
@@ -62,8 +65,13 @@ install -m 0644 "$HERE/vkeys-broker.service" "/etc/systemd/system/$SERVICE_NAME.
 if has_key "openrouter/broker"; then
   echo "provider key already stored"
 else
-  read -rsp "OpenRouter provider key (hidden): " PROVIDER
-  echo
+  if [[ -n "${VKEYS_PROVIDER_KEY_FILE:-}" ]]; then
+    [[ -r "$VKEYS_PROVIDER_KEY_FILE" ]] || die "cannot read $VKEYS_PROVIDER_KEY_FILE"
+    PROVIDER="$(cat "$VKEYS_PROVIDER_KEY_FILE")"
+  else
+    read -rsp "OpenRouter provider key (hidden): " PROVIDER
+    echo
+  fi
   [[ -n "$PROVIDER" ]] || die "no provider key entered"
   seed "openrouter/broker" "$PROVIDER"
   unset PROVIDER
