@@ -26,6 +26,11 @@ Native build is the support test: it proves the Pi's own glibc/toolchain. For a
 release artifact, prefer a static `aarch64-unknown-linux-musl` build (no glibc
 version coupling); test it on the same Pi before shipping.
 
+**Both CI artifacts tested on Raven (2026-10-31):**
+- `aarch64-unknown-linux-gnu` — dynamically linked, runs.
+- `aarch64-unknown-linux-musl` — **statically linked**, runs.
+Use the musl build for the release asset.
+
 ## Key file (headless)
 
 ```bash

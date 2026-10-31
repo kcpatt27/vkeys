@@ -7,5 +7,6 @@ rust/target/
 demo/demo-vault.bin
 demo/audit.jsonl
 demo/out/
+demo/artifacts/
 demo/teaser/node_modules/
 demo/teaser/out/
