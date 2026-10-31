@@ -1,38 +1,57 @@
-# Raven — hardened broker
+# Raven — hardened broker, one command
 
-Runs the Tier 2 broker as a **dedicated `vkeys` system user**, so the agent user
-(`kcpat`) cannot read `/etc/vkeys/master.key` or `/var/lib/vkeys/vault.bin`.
-The agent holds only the broker token and can *use* the provider key through
+Runs the Tier 2 broker as a dedicated **`vkeys` system user**, so the agent user
+(`kcpat`) cannot read `/etc/vkeys/master.key` or `/var/lib/vkeys/vault.bin`. The
+agent holds only the broker token and can *use* the provider key through
 `http://127.0.0.1:8787`.
 
 ## Install
 
 ```bash
-# from the repo on Raven, with a release build in rust/target/release
+# on Raven, with a release build in rust/target/release
 sudo ./deploy/raven/install.sh "$PWD/rust/target/release"
 ```
 
-Then seed the two keys as `vkeys` (hidden prompts), and start:
+It will:
+
+1. create the `vkeys` system user;
+2. install `vkeys` + `vkeys-broker` to `/usr/local/bin`;
+3. publish the `openrouter-broker` profile;
+4. **prompt once** for the OpenRouter provider key (hidden input);
+5. generate `broker/token`, store it, and write it to
+   `~kcpat/.config/vkeys/broker.token` (0600, owned by the agent);
+6. enable and start `vkeys-broker`;
+7. verify `GET /healthz`.
+
+The only interactions are `sudo` and the hidden provider-key prompt. Re-running
+is idempotent; an existing provider key and token are left alone.
+
+## Verify the boundary
 
 ```bash
-sudo -u vkeys env VKEYS_VAULT=/var/lib/vkeys/vault.bin \
-  VKEYS_MASTER_KEY_FILE=/etc/vkeys/master.key \
-  /usr/local/bin/vkeys set openrouter/broker
-
-sudo -u vkeys env VKEYS_VAULT=/var/lib/vkeys/vault.bin \
-  VKEYS_MASTER_KEY_FILE=/etc/vkeys/master.key \
-  /usr/local/bin/vkeys set broker/token
-
-sudo systemctl enable --now vkeys-broker
+sudo systemctl status vkeys-broker --no-pager
 curl -s http://127.0.0.1:8787/healthz
+# as the agent user:
+cat ~/.config/vkeys/broker.token
+sudo -u kcpat test -r /etc/vkeys/master.key && echo "BAD: agent can read key" || echo "ok: key unreadable"
+```
+
+## Reset the broker keys
+
+The vault is deliberately write-only. To start over:
+
+```bash
+sudo systemctl stop vkeys-broker
+sudo rm -f /var/lib/vkeys/vault.bin /etc/vkeys/master.key /home/kcpat/.config/vkeys/broker.token
+sudo ./deploy/raven/install.sh "$PWD/rust/target/release"
 ```
 
 ## Why this is the strong boundary
 
-`vkeys` run as the agent user (Tier 1) can still be decrypted by that user. The
-service user is a different OS identity; the agent cannot read the vault or the
-key, and the broker only exposes use-only endpoints. That is the honest form of
-"the agent never sees the key."
+Tier 1 as the agent user can still be decrypted by that user. The service user is
+a different OS identity; the agent cannot read the vault or the key, and the
+broker only exposes use-only endpoints. That is the honest form of "the agent
+never sees the key."
 
 ## Notes
 
@@ -40,3 +59,5 @@ key, and the broker only exposes use-only endpoints. That is the honest form of
   provider key.
 - Keep the broker on loopback or the tailnet; never expose `:8787` publicly.
 - The service restarts on failure; the audit log is `/var/lib/vkeys/audit.jsonl`.
+- Windows equivalent (service account + ACLed vault) is not built yet; see the
+  repo README's boundary note.

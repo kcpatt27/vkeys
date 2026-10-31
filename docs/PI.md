@@ -52,21 +52,22 @@ broker over the tailnet. The Pi's own vault starts empty.
 
 ## systemd (broker, hardened)
 
-Use `deploy/raven/install.sh`: it creates a dedicated **`vkeys` system user**,
-installs the binaries, and enables `deploy/raven/vkeys-broker.service`. The vault
-(`/var/lib/vkeys`) and key (`/etc/vkeys/master.key`) are readable only by
-`vkeys`; the agent user (`kcpat`) cannot decrypt them and only gets
-`broker/token`.
+Use `deploy/raven/install.sh` — one command. It creates a dedicated **`vkeys`
+system user**, installs both binaries, prompts once for the OpenRouter key,
+generates `broker/token`, writes it to `~kcpat/.config/vkeys/broker.token`, and
+enables the service. The vault (`/var/lib/vkeys`) and key
+(`/etc/vkeys/master.key`) are readable only by `vkeys`; the agent user (`kcpat`)
+cannot decrypt them and only gets the use-only token.
 
 ```bash
 sudo ./deploy/raven/install.sh "$PWD/rust/target/release"
-# seed openrouter/broker + broker/token as the vkeys user, then:
-sudo systemctl enable --now vkeys-broker
 curl -s http://127.0.0.1:8787/healthz
 ```
 
-A `systemd --user` unit as `kcpat` is fine for a quick test but is **not** a
-boundary against an agent running as `kcpat`. See [`deploy/raven/`](../deploy/raven/).
+The only interactions are `sudo` and the hidden provider-key prompt. A
+`systemd --user` unit as `kcpat` is fine for a quick test but is **not** a
+boundary against an agent running as `kcpat`. See
+[`deploy/raven/`](../deploy/raven/).
 
 ## Security boundary
 
