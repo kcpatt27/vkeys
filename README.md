@@ -62,9 +62,10 @@ can decrypt it with a small script. Tier 2 is `vkeys-broker`: the provider key
 stays in the broker process and never enters the client. See `docs/BROKER.md`.
 
 **The strong boundary is a separate OS user.** Run the broker as a dedicated user
-(Linux `vkeys` system user; Windows a service account) with the vault and key
-readable only by that user. The agent's user then cannot decrypt the vault at
-all; it gets a use-only broker token. See [`deploy/raven/`](deploy/raven/).
+(Linux `vkeys` system user; Windows SYSTEM via a startup task) with the vault and
+key readable only by that user. The agent's user then cannot decrypt the vault at
+all; it gets a use-only broker token. See [`deploy/raven/`](deploy/raven/) and
+[`deploy/windows/`](deploy/windows/).
 
 ## Store
 
@@ -78,7 +79,9 @@ all; it gets a use-only broker token. See [`deploy/raven/`](deploy/raven/).
 - **Audit:** `audit.jsonl` next to the vault.
 - **Crypto:** Windows per-value DPAPI (compat) or XChaCha20-Poly1305;
   macOS/Linux XChaCha20-Poly1305 with the 32-byte master key in Keychain /
-  Secret Service. Metadata is plaintext.
+  Secret Service. Metadata is plaintext. On Windows,
+  `VKEYS_SCHEME=xchacha20poly1305` selects the portable key-file scheme; the
+  Windows service install uses it.
 - **Headless Linux / Pi:** no Secret Service? The master key falls back to
   `~/.config/vkeys/master.key` (0600). Set `VKEYS_MASTER_KEY_FILE` to pin it.
   See [`docs/PI.md`](docs/PI.md).

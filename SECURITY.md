@@ -18,9 +18,13 @@ or a bypass.
   (`~/.config/vkeys/master.key`). Same-user processes can read it; that is the
   documented trade for unattended operation.
 - **Strong boundary:** run the Tier 2 broker as a different OS user (Linux
-  `vkeys` system user; Windows service account) with the vault/key readable only
-  by that user. The agent's user cannot decrypt; it holds a use-only token. See
-  `deploy/raven/`.
+  `vkeys` system user; Windows SYSTEM via a startup task) with the vault/key
+  readable only by that user. The agent's user cannot decrypt; it holds a
+  use-only token. See `deploy/raven/` and `deploy/windows/`.
+- On Windows, `deploy/windows/install.ps1` runs the broker as SYSTEM and ACLs
+  `C:\ProgramData\vkeys-broker` to SYSTEM + Administrators; the agent gets only
+  a use-only token. It sets `VKEYS_SCHEME=xchacha20poly1305` so the SYSTEM task
+  can read a key file the agent cannot.
 - vkeys makes accidental exposure hard, not impossible: no `get`, profiles with
   fixed `argv`, a clean child environment, output scrubbing, and an audit log.
   It is not a sandbox.

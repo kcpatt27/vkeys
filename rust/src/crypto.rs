@@ -11,7 +11,20 @@ use rand::RngCore;
 pub const DPAPI: &str = "dpapi";
 pub const XCHACHA: &str = "xchacha20poly1305";
 
+fn forced_xchacha() -> bool {
+    matches!(
+        std::env::var("VKEYS_SCHEME").as_deref(),
+        Ok("xchacha") | Ok("xchacha20poly1305")
+    )
+}
+
 pub fn protect(plain: &[u8]) -> Result<(&'static str, Vec<u8>), String> {
+    // Windows defaults to DPAPI for compatibility; VKEYS_SCHEME=xchacha forces
+    // the portable key-file scheme (used by the Windows service-account deploy).
+    if forced_xchacha() {
+        let key = crate::secret::master_key()?;
+        return Ok((XCHACHA, seal_with_key(&key, plain)?));
+    }
     #[cfg(windows)]
     {
         return Ok((DPAPI, crate::dpapi::protect(plain)?));
