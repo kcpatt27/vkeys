@@ -127,7 +127,7 @@ if (-not ($hasToken -and (Test-Path $AgentTokenPath))) {
     $token | & $Vkeys set broker/token --stdin
     New-Item -ItemType Directory -Force (Split-Path $AgentTokenPath) | Out-Null
     Set-Content -Path $AgentTokenPath -Value $token -NoNewline -Encoding ascii
-    & icacls $AgentTokenPath /inheritance:r /grant:r "$AgentUser:(R)" "*S-1-5-18:(F)" "*S-1-5-32-544:(F)" | Out-Null
+    & icacls $AgentTokenPath /inheritance:r /grant:r "${AgentUser}:(R)" "*S-1-5-18:(F)" "*S-1-5-32-544:(F)" | Out-Null
     Remove-Variable token, bytes -ErrorAction SilentlyContinue
     Write-Host "broker token written to $AgentTokenPath"
 }
