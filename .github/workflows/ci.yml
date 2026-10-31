@@ -1,8 +1,9 @@
 name: ci
 
+# Manual while the repo is private. Re-enable push/pull_request after the public
+# flip (see RELEASING.md).
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   test:

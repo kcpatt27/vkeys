@@ -1,0 +1,128 @@
+name: release-artifacts
+
+# Manual or on a published GitHub release. Deliberately no `push` trigger: the
+# repo is private until release day, and these runners are billed by the minute.
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  linux-arm64:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [aarch64-unknown-linux-gnu, aarch64-unknown-linux-musl]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: taiki-e/install-action@cross
+      - name: build
+        working-directory: rust
+        run: cross build --release --target ${{ matrix.target }}
+      - name: package
+        working-directory: rust
+        run: |
+          set -euo pipefail
+          name="vkeys-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          mkdir -p "dist/$name"
+          cp "target/${{ matrix.target }}/release/vkeys" \
+             "target/${{ matrix.target }}/release/vkeys-broker" "dist/$name/"
+          tar -czf "dist/$name.tar.gz" -C "dist/$name" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vkeys-${{ matrix.target }}
+          if-no-files-found: error
+          path: rust/dist/*.tar.gz
+
+  macos-universal:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+      - name: build both slices + lipo
+        working-directory: rust
+        run: |
+          set -euo pipefail
+          cargo build --release --locked --target x86_64-apple-darwin
+          cargo build --release --locked --target aarch64-apple-darwin
+          mkdir -p dist/bin
+          for bin in vkeys vkeys-broker; do
+            lipo -create \
+              "target/x86_64-apple-darwin/release/$bin" \
+              "target/aarch64-apple-darwin/release/$bin" \
+              -output "dist/bin/$bin"
+            archs=$(lipo -archs "dist/bin/$bin")
+            echo "$bin -> $archs"
+            case "$archs" in
+              *x86_64*aarch64*|*aarch64*x86_64*) ;;
+              *) echo "::error::missing slice in $bin: $archs"; exit 1 ;;
+            esac
+            test "$(echo "$archs" | wc -w)" -eq 2
+          done
+          ./dist/bin/vkeys --version
+          ./dist/bin/vkeys-broker --help > /dev/null
+      - name: package
+        working-directory: rust
+        run: |
+          set -euo pipefail
+          name="vkeys-${GITHUB_REF_NAME}-macos-universal"
+          tar -czf "$name.tar.gz" -C dist/bin vkeys vkeys-broker
+          shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vkeys-macos-universal
+          if-no-files-found: error
+          path: |
+            rust/vkeys-*-macos-universal.tar.gz
+            rust/vkeys-*-macos-universal.tar.gz.sha256
+
+  windows-arm64:
+    runs-on: windows-11-arm
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # ring forces clang for aarch64-pc-windows-msvc; the image ships ARM64 LLVM.
+      - name: toolchain sanity
+        run: |
+          if (-not (Get-Command clang -ErrorAction SilentlyContinue)) {
+            throw "clang missing: ring cannot build for aarch64-pc-windows-msvc"
+          }
+          clang --version
+      - name: test
+        run: cargo test --release
+      - name: build
+        run: cargo build --release
+      - name: assert ARM64 PE
+        run: |
+          foreach ($exe in 'vkeys','vkeys-broker') {
+            $bytes = [IO.File]::ReadAllBytes("target\release\$exe.exe")
+            $pe = [BitConverter]::ToInt32($bytes, 0x3c)
+            $machine = [BitConverter]::ToUInt16($bytes, $pe + 4)
+            if ($machine -ne 0xAA64) {
+              throw ("{0}.exe is not ARM64 (machine=0x{1:X4})" -f $exe, $machine)
+            }
+          }
+      - name: package
+        run: |
+          $name = "vkeys-$env:GITHUB_REF_NAME-aarch64-pc-windows-msvc"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path target\release\vkeys.exe,target\release\vkeys-broker.exe `
+            -DestinationPath "dist\$name.zip" -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vkeys-aarch64-pc-windows-msvc
+          if-no-files-found: error
+          path: rust/dist/*.zip
