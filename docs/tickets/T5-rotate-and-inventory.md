@@ -2,6 +2,24 @@
 
 **Status:** planning. Follows T4 (transport) and the lost-device case.
 
+## The real friction is not the command
+
+Rotating keys is not the hard part. The hard part is the number of provider
+dashboards you have to click through, and the number of accounts an agent has to
+have access to in order to do it. Most credentials already live in a password
+manager; what is missing is the **API key manager** and a way for agents to use
+what it holds.
+
+So the rotation feature is a cockpit, not a loop:
+
+- Every name carries a **rotation URL** (the provider page that issues or
+  revokes that key). `vkeys rotate` prints the link before prompting.
+- `--all` groups by provider so one dashboard visit covers several keys.
+- The password manager is out of scope. Do not import password-manager exports;
+  do not try to be one.
+- What matters is: agent can use the key, human never sees it, and the provider
+  page is one click away when it must be reissued.
+
 ## Rotate all
 
 A lost laptop means every key that device could read is suspect. Re-entering
@@ -52,3 +70,4 @@ backend returns one, that is a vault error, not a row.
 4. After a device revocation and epoch bump, every previously shared key reads
    `stale` until rotated.
 5. No value, fingerprint, or length is printed at any point.
+6. Every name can carry a rotation URL; `rotate` prints it before the prompt.
