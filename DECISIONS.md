@@ -69,3 +69,42 @@ errors with "open it on Windows to migrate".
 is portable once the master key is present on the target machine. Master-key
 export/import (the last step for a truly portable vault) is still future.
 DPAPI entries are not readable off Windows without a migration step.
+
+## ADR-0004 - VeraCrypt recovery material stays out of vkeys
+
+**Status:** accepted (2026-11-01).
+
+**Context.** A 5 TB offsite backup drive is encrypted with VeraCrypt as a
+whole-volume standard volume. Recovery depends on a password a human can read, a
+volume header backup stored off the volume, and remembering the cipher, hash,
+PIM and keyfile choices. The question was whether vkeys should hold this
+material, possibly behind a new feature.
+
+**Decision.** No. vkeys remains a write-only key store for injecting values into
+fixed-argv processes.
+
+1. **Retrieval is required.** Recovery is a human typing a password into a mount
+   dialog. `get` is deliberately absent (ADR-0001 item 3); adding a reveal path
+   would remove the property the tool exists to provide.
+2. **The vault is machine-bound.** Windows entries are DPAPI CurrentUser
+   (ADR-0003), so the vault dies with this account and this machine. Recovery
+   material must survive exactly that loss.
+3. **The consumer is wrong.** Values are injected into child processes with
+   fixed argv. A human mounting a volume is not a child process.
+4. **The payload is wrong.** A volume header backup is a small binary artifact;
+   the store holds short hidden-paste strings.
+
+**Consequences.**
+- The password lives in the password manager.
+- The header backup lives on a second drive plus one off-machine copy.
+- A manifest records volume label and size, cipher, hash, PIM, keyfile use,
+  creation date, VeraCrypt version, the header backup SHA-256, and a pointer to
+  the password entry - never the password itself.
+- Durability and findability are the requirements, not secrecy: the header
+  backup is already ciphertext.
+
+**Rejected.**
+- A `reveal` / `unseal` subcommand - breaks ADR-0001.
+- Storing the header as a vault value - binary payload, and still unretrievable.
+- Recording only the password - loses the PIM / keyfile / cipher state that can
+  make a volume permanently unmountable.
