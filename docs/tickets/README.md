@@ -19,5 +19,6 @@ Committed local ticket queue (no external tracker yet). One file per ticket.
 | 013 | macOS signing/notarization | P3 | open |
 | 014 | Demo/teaser release asset | P2 | open |
 | 015 | CI re-enable + release triggers | P0 | open |
+| 016 | Broker lifecycle tray (design) | P2 | design |
 
 Priorities: **P0** release blocker · **P1** security · **P2** post-release · **P3** later.
