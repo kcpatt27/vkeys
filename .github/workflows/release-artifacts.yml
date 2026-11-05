@@ -63,7 +63,7 @@ jobs:
             archs=$(lipo -archs "dist/bin/$bin")
             echo "$bin -> $archs"
             case "$archs" in
-              *x86_64*aarch64*|*aarch64*x86_64*) ;;
+              *x86_64*aarch64*|*aarch64*x86_64*|*x86_64*arm64*|*arm64*x86_64*) ;;
               *) echo "::error::missing slice in $bin: $archs"; exit 1 ;;
             esac
             test "$(echo "$archs" | wc -w)" -eq 2
