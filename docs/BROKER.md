@@ -58,11 +58,11 @@ API key:  <broker/token value, not the provider key>
 - bearer-token auth on chat completions
 - rate limits each client (peer IP + presented token) with 429; default 60
   requests per 60 seconds
-- atomically reserves worst-case spend per request before calling upstream;
+- atomically reserves the configured per-request ceiling before calling upstream;
   refuses with 429 once the in-memory budget is exhausted
 - parses the request JSON before forwarding: a `max_tokens` above
-  `VKEYS_BROKER_MAX_REQUEST_TOKENS` is refused with 400, and a missing
-  `max_tokens` is set to that ceiling
+  `VKEYS_BROKER_MAX_REQUEST_TOKENS` is refused with 400, a zero `max_tokens` is
+  refused with 400, and a missing `max_tokens` is set to that ceiling
 - proxies non-streaming JSON to the upstream
 - injects `Authorization: Bearer <provider key>` only upstream
 - parses `usage.prompt_tokens` / `usage.completion_tokens`
@@ -83,7 +83,7 @@ API key:  <broker/token value, not the provider key>
 | `VKEYS_BROKER_TOKEN_PREVIOUS` | unset | old token still accepted during rotation |
 | `VKEYS_BROKER_RATE_LIMIT` | `60` | requests per client per window; `0` disables |
 | `VKEYS_BROKER_RATE_WINDOW_SECS` | `60` | limiter window in seconds; `0` disables |
-| `VKEYS_BROKER_MAX_REQUEST_TOKENS` | `200000` | per-request `max_tokens` ceiling and worst-case billed tokens used for budget reservation |
+| `VKEYS_BROKER_MAX_REQUEST_TOKENS` | `200000` | per-request `max_tokens` ceiling and reservation unit for the budget |
 
 Limits apply to the peer IP and the presented token; both buckets must allow a
 request. This caps unauthenticated floods per IP while giving each token its own

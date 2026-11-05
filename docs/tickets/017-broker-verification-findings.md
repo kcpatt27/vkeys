@@ -20,6 +20,7 @@ Fix:
 - parse the request JSON before forwarding
 - reject `max_tokens > max_request_tokens` with HTTP 400
   `{"error":"max_tokens exceeds broker ceiling"}` and audit the refusal
+- reject `max_tokens == 0` with HTTP 400 `{"error":"max_tokens must be at least 1"}`
 - inject `max_tokens = max_request_tokens` when the field is absent
 - cap the ledger at the reservation on settle and audit `overage_usd`
   (actual - reserved); the ledger never exceeds `budget_usd`

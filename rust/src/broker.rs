@@ -429,6 +429,15 @@ fn post_chat(mut request: Request, config: &Config, state: &State) {
         Some(v) => {
             let n = v.as_f64().filter(|n| n.is_finite() && *n >= 0.0);
             match n {
+                Some(n) if n == 0.0 => {
+                    audit(config, refusal_event(400, "max_tokens must be at least 1"));
+                    respond_json(
+                        request,
+                        400,
+                        json!({"error": "max_tokens must be at least 1"}),
+                    );
+                    return;
+                }
                 Some(n) if n <= config.max_request_tokens as f64 => {}
                 Some(_) => {
                     audit(
@@ -1076,6 +1085,28 @@ mod tests {
         let event: Value = serde_json::from_str(text.lines().last().unwrap()).unwrap();
         assert_eq!(event["status"], 400);
         assert_eq!(event["reason"], "max_tokens exceeds broker ceiling");
+    }
+
+    #[test]
+    fn zero_max_tokens_is_rejected() {
+        let (upstream, calls, _) = fake_upstream("ok");
+        let dir = temp_dir("zero-max-tokens");
+        let audit = dir.join("audit.jsonl");
+        let mut config = config_for(upstream, audit.clone(), 5.0, 1.0, 1.0);
+        config.max_request_tokens = 100;
+        let (port, _) = start(config);
+        let (status, body) = post(
+            port,
+            "broker-secret",
+            r#"{"model":"test/model","max_tokens":0,"messages":[]}"#,
+        );
+        assert_eq!(status, 400);
+        assert!(body.contains("max_tokens must be at least 1"));
+        assert!(calls.lock().unwrap().is_empty());
+        let text = fs::read_to_string(&audit).unwrap();
+        let event: Value = serde_json::from_str(text.lines().last().unwrap()).unwrap();
+        assert_eq!(event["status"], 400);
+        assert_eq!(event["reason"], "max_tokens must be at least 1");
     }
 
     #[test]
