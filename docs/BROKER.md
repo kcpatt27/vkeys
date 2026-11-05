@@ -60,13 +60,19 @@ API key:  <broker/token value, not the provider key>
   requests per 60 seconds
 - atomically reserves worst-case spend per request before calling upstream;
   refuses with 429 once the in-memory budget is exhausted
+- parses the request JSON before forwarding: a `max_tokens` above
+  `VKEYS_BROKER_MAX_REQUEST_TOKENS` is refused with 400, and a missing
+  `max_tokens` is set to that ceiling
 - proxies non-streaming JSON to the upstream
 - injects `Authorization: Bearer <provider key>` only upstream
 - parses `usage.prompt_tokens` / `usage.completion_tokens`
 - computes cost from `--price-in` / `--price-out` (USD per 1M tokens)
+- caps the ledger at the reservation: if the upstream reports more than the
+  reserved worst case, the ledger is charged only the reservation and the
+  audit line carries `overage_usd` (actual - reserved)
 - appends an audit line per request: timestamp, status, model, token counts,
-  cost; refusals also carry a reason. Never prompt text, completion text, or
-  keys
+  cost; refusals (401, 400, 429) also carry a reason. Never prompt text,
+  completion text, or keys
 - no `vkeys get`, no generic command, no streaming, no tools
 
 ## Environment
@@ -77,11 +83,20 @@ API key:  <broker/token value, not the provider key>
 | `VKEYS_BROKER_TOKEN_PREVIOUS` | unset | old token still accepted during rotation |
 | `VKEYS_BROKER_RATE_LIMIT` | `60` | requests per client per window; `0` disables |
 | `VKEYS_BROKER_RATE_WINDOW_SECS` | `60` | limiter window in seconds; `0` disables |
-| `VKEYS_BROKER_MAX_REQUEST_TOKENS` | `200000` | worst-case billed tokens per request, used for budget reservation |
+| `VKEYS_BROKER_MAX_REQUEST_TOKENS` | `200000` | per-request `max_tokens` ceiling and worst-case billed tokens used for budget reservation |
 
 Limits apply to the peer IP and the presented token; both buckets must allow a
 request. This caps unauthenticated floods per IP while giving each token its own
 budget. Rate and spend state live in memory and reset when the broker restarts.
+
+Because the IP bucket is shared, clients behind one address (loopback, or a
+tailnet exit/NAT) share that bucket: one busy client can exhaust the per-IP
+allowance and starve the others with 429s even when their token buckets are
+idle. The token bucket still gives each token its own allowance, so the fix is
+to raise `VKEYS_BROKER_RATE_LIMIT` or give each client its own token. The
+ordering is deliberate: the IP bucket is checked first so an unauthenticated
+flood is capped before any token work. Do not remove it without an equivalent
+unauthenticated flood cap.
 
 ## Token rotation
 
@@ -129,6 +144,9 @@ Binding is only half the control. Also:
 - budget reservation uses `VKEYS_BROKER_MAX_REQUEST_TOKENS` as the per-request
   ceiling. If the ceiling is larger than the whole budget, requests are
   admitted one at a time; raise the budget or lower the ceiling for parallelism
+- the broker ledger is capped at the reservation. The provider may still bill
+  overage if the upstream ignores `max_tokens`; that overage is recorded in the
+  audit line as `overage_usd` but is not charged to the in-memory ledger
 - one provider (OpenRouter) and one upstream
 - no streaming; a client that sends `"stream": true` gets 400
 - per-client tokens and per-client budgets are deferred to ticket 011
@@ -138,7 +156,7 @@ Binding is only half the control. Also:
 
 ```powershell
 cd rust
-cargo test --release          # 11 broker tests, local fake upstream
+cargo test --release          # 18 broker tests, local fake upstream
 ```
 
 The broker tests use a local fake upstream. They never read the real vault,

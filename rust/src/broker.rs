@@ -90,6 +90,7 @@ impl State {
             return Some(Reservation {
                 state: self,
                 amount: 0.0,
+                budget: 0.0,
             });
         }
         let ceiling =
@@ -112,13 +113,26 @@ impl State {
         Some(Reservation {
             state: self,
             amount,
+            budget: config.budget_usd,
         })
     }
 
-    fn settle(&self, reserved: f64, actual: f64) {
+    /// Charge actual spend, capped at the reservation so the ledger can never
+    /// exceed the budget. Returns the uncharged overage (actual - charged).
+    fn settle(&self, reserved: f64, actual: f64, budget: f64) -> f64 {
         let mut ledger = self.lock_ledger();
         ledger.reserved_usd -= reserved;
-        ledger.spent_usd += actual;
+        let applied = if budget > 0.0 {
+            actual.min(reserved)
+        } else {
+            actual
+        };
+        let before = ledger.spent_usd;
+        ledger.spent_usd += applied;
+        if budget > 0.0 && ledger.spent_usd > budget {
+            ledger.spent_usd = budget;
+        }
+        (actual - (ledger.spent_usd - before)).max(0.0)
     }
 
     fn release(&self, reserved: f64) {
@@ -153,12 +167,15 @@ impl State {
 struct Reservation<'a> {
     state: &'a State,
     amount: f64,
+    budget: f64,
 }
 
 impl Reservation<'_> {
-    fn commit(mut self, actual: f64) {
-        self.state.settle(self.amount, actual);
+    /// Returns the overage that was not charged to the ledger.
+    fn commit(mut self, actual: f64) -> f64 {
+        let overage = self.state.settle(self.amount, actual, self.budget);
         self.amount = 0.0; // Drop releases nothing after commit.
+        overage
     }
 }
 
@@ -218,11 +235,15 @@ pub fn local_timestamp() -> String {
         .to_string()
 }
 
-fn env_or<T: std::str::FromStr>(name: &str, default: T) -> T {
-    std::env::var(name)
-        .ok()
-        .and_then(|v| v.trim().parse().ok())
-        .unwrap_or(default)
+fn env_or<T: std::str::FromStr>(name: &str, default: T) -> Result<T, String> {
+    match std::env::var(name) {
+        Ok(v) => v
+            .trim()
+            .parse()
+            .map_err(|_| format!("{name} is not a valid value")),
+        Err(std::env::VarError::NotPresent) => Ok(default),
+        Err(_) => Err(format!("{name} is not valid unicode")),
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -248,6 +269,18 @@ pub fn config_with(
     }
     if broker_token.is_empty() {
         return Err("VKEYS_BROKER_TOKEN is required".to_string());
+    }
+    if !budget_usd.is_finite() || budget_usd < 0.0 {
+        return Err("budget_usd must be a finite, non-negative number".to_string());
+    }
+    if !price_in.is_finite() || price_in < 0.0 {
+        return Err("price_in must be a finite, non-negative number".to_string());
+    }
+    if !price_out.is_finite() || price_out < 0.0 {
+        return Err("price_out must be a finite, non-negative number".to_string());
+    }
+    if budget_usd > 0.0 && price_in == 0.0 && price_out == 0.0 {
+        return Err("budget_usd > 0 requires a non-zero price_in or price_out".to_string());
     }
     Ok(Config {
         host,
@@ -291,12 +324,12 @@ pub fn config_from_env(
         budget_usd,
         price_in,
         price_out,
-        env_or("VKEYS_BROKER_RATE_LIMIT", DEFAULT_RATE_LIMIT),
-        env_or("VKEYS_BROKER_RATE_WINDOW_SECS", DEFAULT_RATE_WINDOW_SECS),
+        env_or("VKEYS_BROKER_RATE_LIMIT", DEFAULT_RATE_LIMIT)?,
+        env_or("VKEYS_BROKER_RATE_WINDOW_SECS", DEFAULT_RATE_WINDOW_SECS)?,
         env_or(
             "VKEYS_BROKER_MAX_REQUEST_TOKENS",
             DEFAULT_MAX_REQUEST_TOKENS,
-        ),
+        )?,
     )
 }
 
@@ -351,17 +384,9 @@ fn post_chat(mut request: Request, config: &Config, state: &State) {
         return;
     }
 
-    let reservation = match state.reserve(config) {
-        Some(reservation) => reservation,
-        None => {
-            audit(config, refusal_event(429, "budget exhausted"));
-            respond_json(request, 429, json!({"error": "budget exhausted"}));
-            return;
-        }
-    };
-
     let length = content_length(&request);
     if length == 0 || length > MAX_BODY {
+        audit(config, refusal_event(400, "invalid body"));
         respond_json(request, 400, json!({"error": "invalid body"}));
         return;
     }
@@ -371,21 +396,77 @@ fn post_chat(mut request: Request, config: &Config, state: &State) {
         .take((MAX_BODY as u64) + 1)
         .read_to_end(&mut body);
     if read.is_err() || body.len() > MAX_BODY {
+        audit(config, refusal_event(400, "invalid body"));
         respond_json(request, 400, json!({"error": "invalid body"}));
         return;
     }
 
-    let payload: Value = match serde_json::from_slice(&body) {
+    let mut payload: Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
         Err(_) => {
+            audit(config, refusal_event(400, "invalid JSON"));
             respond_json(request, 400, json!({"error": "invalid JSON"}));
             return;
         }
     };
+    if !payload.is_object() {
+        audit(config, refusal_event(400, "invalid body"));
+        respond_json(request, 400, json!({"error": "invalid body"}));
+        return;
+    }
     if is_truthy(payload.get("stream")) {
+        audit(config, refusal_event(400, "streaming is not supported"));
         respond_json(request, 400, json!({"error": "streaming is not supported"}));
         return;
     }
+    // Cap the request so the reservation is a real upper bound. A client that
+    // asks for more than the ceiling is refused; a client that omits the field
+    // gets the ceiling injected.
+    match payload.get("max_tokens") {
+        None | Some(Value::Null) => {
+            payload["max_tokens"] = json!(config.max_request_tokens);
+        }
+        Some(v) => {
+            let n = v.as_f64().filter(|n| n.is_finite() && *n >= 0.0);
+            match n {
+                Some(n) if n <= config.max_request_tokens as f64 => {}
+                Some(_) => {
+                    audit(
+                        config,
+                        refusal_event(400, "max_tokens exceeds broker ceiling"),
+                    );
+                    respond_json(
+                        request,
+                        400,
+                        json!({"error": "max_tokens exceeds broker ceiling"}),
+                    );
+                    return;
+                }
+                None => {
+                    audit(config, refusal_event(400, "invalid body"));
+                    respond_json(request, 400, json!({"error": "invalid body"}));
+                    return;
+                }
+            }
+        }
+    }
+    let forward_body = match serde_json::to_vec(&payload) {
+        Ok(b) => b,
+        Err(_) => {
+            audit(config, refusal_event(400, "invalid body"));
+            respond_json(request, 400, json!({"error": "invalid body"}));
+            return;
+        }
+    };
+
+    let reservation = match state.reserve(config) {
+        Some(reservation) => reservation,
+        None => {
+            audit(config, refusal_event(429, "budget exhausted"));
+            respond_json(request, 429, json!({"error": "budget exhausted"}));
+            return;
+        }
+    };
 
     let upstream = format!("{}/chat/completions", config.upstream.trim_end_matches('/'));
     let agent = ureq::AgentBuilder::new()
@@ -395,7 +476,7 @@ fn post_chat(mut request: Request, config: &Config, state: &State) {
         .post(&upstream)
         .set("Authorization", &format!("Bearer {}", config.provider_key))
         .set("Content-Type", "application/json")
-        .send_bytes(&body);
+        .send_bytes(&forward_body);
 
     let (status, response_body, content_type) = match result {
         Ok(response) => drain(response),
@@ -428,19 +509,20 @@ fn post_chat(mut request: Request, config: &Config, state: &State) {
             + completion_tokens as f64 * config.price_out)
             / 1_000_000.0;
     }
-    reservation.commit(cost);
+    let overage = reservation.commit(cost);
 
-    audit(
-        config,
-        json!({
-            "ts": local_timestamp(),
-            "status": status,
-            "model": model,
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "cost_usd": round(cost, 8),
-        }),
-    );
+    let mut event = json!({
+        "ts": local_timestamp(),
+        "status": status,
+        "model": model,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "cost_usd": round(cost, 8),
+    });
+    if overage > 0.0 {
+        event["overage_usd"] = json!(round(overage, 8));
+    }
+    audit(config, event);
     respond(request, status, response_body, &content_type);
 }
 
@@ -529,7 +611,12 @@ fn drain(response: ureq::Response) -> (u16, Vec<u8>, String) {
     (status, body, content_type)
 }
 
+/// Serializes audit appends so concurrent requests cannot interleave a line.
+static AUDIT_LOCK: Mutex<()> = Mutex::new(());
+
 fn audit(config: &Config, event: Value) {
+    let line = format!("{event}\n");
+    let _guard = AUDIT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(parent) = config.audit.parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -538,7 +625,7 @@ fn audit(config: &Config, event: Value) {
         .append(true)
         .open(&config.audit)
     {
-        let _ = writeln!(file, "{event}");
+        let _ = file.write_all(line.as_bytes());
     }
 }
 
@@ -572,11 +659,19 @@ mod tests {
             .map(|i| i + 4)
     }
 
-    fn fake_upstream(mode: &'static str) -> (u16, Arc<Mutex<Vec<String>>>) {
+    fn fake_upstream(
+        mode: &'static str,
+    ) -> (
+        u16,
+        Arc<Mutex<Vec<String>>>,
+        Arc<Mutex<Vec<String>>>,
+    ) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let calls = Arc::new(Mutex::new(Vec::new()));
+        let bodies = Arc::new(Mutex::new(Vec::new()));
         let seen = Arc::clone(&calls);
+        let seen_bodies = Arc::clone(&bodies);
         thread::spawn(move || {
             for stream in listener.incoming() {
                 let mut socket = match stream {
@@ -618,6 +713,11 @@ mod tests {
                         Err(_) => break,
                     }
                 }
+                if buf.len() >= header_end {
+                    seen_bodies.lock().unwrap().push(
+                        String::from_utf8_lossy(&buf[header_end..]).to_string(),
+                    );
+                }
                 let (status, body) = if mode == "error" {
                     (500, r#"{"error":"upstream failed"}"#.to_string())
                 } else {
@@ -635,7 +735,7 @@ mod tests {
                 let _ = socket.write_all(response.as_bytes());
             }
         });
-        (port, calls)
+        (port, calls, bodies)
     }
 
     fn temp_dir(tag: &str) -> PathBuf {
@@ -726,7 +826,7 @@ mod tests {
 
     #[test]
     fn health_is_public() {
-        let (upstream, _) = fake_upstream("ok");
+        let (upstream, _, _) = fake_upstream("ok");
         let dir = temp_dir("health");
         let (port, _) = start_broker(upstream, dir.join("audit.jsonl"), 5.0, 0.0, 0.0);
         let response = ureq::get(&format!("http://127.0.0.1:{port}/healthz"))
@@ -739,7 +839,7 @@ mod tests {
 
     #[test]
     fn bad_token_is_rejected_without_upstream() {
-        let (upstream, calls) = fake_upstream("ok");
+        let (upstream, calls, _) = fake_upstream("ok");
         let dir = temp_dir("badtoken");
         let (port, _) = start_broker(upstream, dir.join("audit.jsonl"), 5.0, 0.0, 0.0);
         let (status, body) = post(port, "wrong", body());
@@ -750,7 +850,7 @@ mod tests {
 
     #[test]
     fn proxy_injects_provider_key_and_audits() {
-        let (upstream, calls) = fake_upstream("ok");
+        let (upstream, calls, _) = fake_upstream("ok");
         let dir = temp_dir("proxy");
         let audit = dir.join("audit.jsonl");
         let (port, _) = start_broker(upstream, audit.clone(), 5.0, 1.0, 1.0);
@@ -772,7 +872,7 @@ mod tests {
 
     #[test]
     fn budget_refuses_next_call() {
-        let (upstream, calls) = fake_upstream("ok");
+        let (upstream, calls, _) = fake_upstream("ok");
         let dir = temp_dir("budget");
         let (port, _) = start_broker(upstream, dir.join("audit.jsonl"), 0.0001, 1.0, 1.0);
         assert_eq!(post(port, "broker-secret", body()).0, 200);
@@ -784,7 +884,7 @@ mod tests {
 
     #[test]
     fn upstream_error_is_proxied_and_audited() {
-        let (upstream, _) = fake_upstream("error");
+        let (upstream, _, _) = fake_upstream("error");
         let dir = temp_dir("upstream-error");
         let audit = dir.join("audit.jsonl");
         let (port, _) = start_broker(upstream, audit.clone(), 5.0, 0.0, 0.0);
@@ -798,7 +898,7 @@ mod tests {
 
     #[test]
     fn streaming_is_rejected() {
-        let (upstream, _) = fake_upstream("ok");
+        let (upstream, _, _) = fake_upstream("ok");
         let dir = temp_dir("stream");
         let (port, _) = start_broker(upstream, dir.join("audit.jsonl"), 5.0, 0.0, 0.0);
         let (status, body) = post(
@@ -812,7 +912,7 @@ mod tests {
 
     #[test]
     fn rate_limit_returns_429() {
-        let (upstream, _) = fake_upstream("ok");
+        let (upstream, _, _) = fake_upstream("ok");
         let dir = temp_dir("rate");
         let mut config = config_for(upstream, dir.join("audit.jsonl"), 5.0, 0.0, 0.0);
         config.rate_limit = 1;
@@ -827,7 +927,7 @@ mod tests {
 
     #[test]
     fn previous_token_allows_rotation() {
-        let (upstream, _) = fake_upstream("ok");
+        let (upstream, _, _) = fake_upstream("ok");
         let dir = temp_dir("rotate");
         let mut config = config_for(upstream, dir.join("audit.jsonl"), 5.0, 0.0, 0.0);
         config.previous_token = Some("old-secret".to_string());
@@ -838,7 +938,7 @@ mod tests {
 
     #[test]
     fn retired_token_is_rejected() {
-        let (upstream, _) = fake_upstream("ok");
+        let (upstream, _, _) = fake_upstream("ok");
         let dir = temp_dir("retired");
         let (port, _) = start_broker(upstream, dir.join("audit.jsonl"), 5.0, 0.0, 0.0);
         assert_eq!(post(port, "old-secret", body()).0, 401);
@@ -846,7 +946,7 @@ mod tests {
 
     #[test]
     fn budget_is_atomic_under_concurrency() {
-        let (upstream, calls) = fake_upstream("ok");
+        let (upstream, calls, _) = fake_upstream("ok");
         let dir = temp_dir("atomic-budget");
         // Each call costs (100 + 50) tokens = 0.00015 USD at 1.0/1.0.
         let mut config = config_for(upstream, dir.join("audit.jsonl"), 0.00031, 1.0, 1.0);
@@ -911,5 +1011,160 @@ mod tests {
         .err()
         .unwrap();
         assert!(err.contains("VKEYS_BROKER_TOKEN"));
+    }
+
+    fn try_config(budget: f64, price_in: f64, price_out: f64) -> Result<Config, String> {
+        config_with(
+            Some("provider".into()),
+            Some("token".into()),
+            None,
+            "127.0.0.1".into(),
+            0,
+            DEFAULT_UPSTREAM.into(),
+            PathBuf::from("a"),
+            budget,
+            price_in,
+            price_out,
+            60,
+            60,
+            200_000,
+        )
+    }
+
+    #[test]
+    fn config_rejects_invalid_numbers() {
+        assert!(try_config(-1.0, 1.0, 1.0).is_err());
+        assert!(try_config(f64::NAN, 1.0, 1.0).is_err());
+        assert!(try_config(f64::INFINITY, 1.0, 1.0).is_err());
+        assert!(try_config(5.0, -1.0, 1.0).is_err());
+        assert!(try_config(5.0, f64::NAN, 1.0).is_err());
+        assert!(try_config(5.0, 1.0, -1.0).is_err());
+        assert!(try_config(5.0, 1.0, f64::INFINITY).is_err());
+        // A positive budget with no prices can never charge anything.
+        assert!(try_config(5.0, 0.0, 0.0).is_err());
+        // Zero is the only disabled budget, and it needs no prices.
+        assert!(try_config(0.0, 0.0, 0.0).is_ok());
+        assert!(try_config(5.0, 1.0, 0.0).is_ok());
+    }
+
+    #[test]
+    fn env_or_rejects_unparseable_value() {
+        let name = "VKEYS_BROKER_TEST_ENV_OR";
+        std::env::set_var(name, "not-a-number");
+        assert!(env_or::<u32>(name, 60).is_err());
+        std::env::remove_var(name);
+        assert_eq!(env_or::<u32>(name, 60).unwrap(), 60);
+    }
+
+    #[test]
+    fn oversized_max_tokens_is_rejected() {
+        let (upstream, calls, _) = fake_upstream("ok");
+        let dir = temp_dir("max-tokens");
+        let audit = dir.join("audit.jsonl");
+        let mut config = config_for(upstream, audit.clone(), 5.0, 1.0, 1.0);
+        config.max_request_tokens = 100;
+        let (port, _) = start(config);
+        let (status, body) = post(
+            port,
+            "broker-secret",
+            r#"{"model":"test/model","max_tokens":101,"messages":[]}"#,
+        );
+        assert_eq!(status, 400);
+        assert!(body.contains("max_tokens exceeds broker ceiling"));
+        assert!(calls.lock().unwrap().is_empty());
+        let text = fs::read_to_string(&audit).unwrap();
+        let event: Value = serde_json::from_str(text.lines().last().unwrap()).unwrap();
+        assert_eq!(event["status"], 400);
+        assert_eq!(event["reason"], "max_tokens exceeds broker ceiling");
+    }
+
+    #[test]
+    fn absent_max_tokens_is_injected() {
+        let (upstream, _, bodies) = fake_upstream("ok");
+        let dir = temp_dir("inject");
+        let mut config = config_for(upstream, dir.join("audit.jsonl"), 5.0, 1.0, 1.0);
+        config.max_request_tokens = 1234;
+        let (port, _) = start(config);
+        assert_eq!(post(port, "broker-secret", body()).0, 200);
+        let sent: Value = serde_json::from_str(bodies.lock().unwrap().last().unwrap()).unwrap();
+        assert_eq!(sent["max_tokens"], 1234);
+    }
+
+    #[test]
+    fn overage_is_capped_and_audited() {
+        let (upstream, _, _) = fake_upstream("ok");
+        let dir = temp_dir("overage");
+        let audit = dir.join("audit.jsonl");
+        // The fake upstream always reports 150 tokens, ignoring max_tokens.
+        let mut config = config_for(upstream, audit.clone(), 5.0, 1.0, 1.0);
+        config.max_request_tokens = 10;
+        let (port, _) = start(config);
+        assert_eq!(post(port, "broker-secret", body()).0, 200);
+        let text = fs::read_to_string(&audit).unwrap();
+        let event: Value = serde_json::from_str(text.lines().last().unwrap()).unwrap();
+        assert_eq!(event["cost_usd"], 0.00015);
+        let overage = event["overage_usd"].as_f64().unwrap();
+        assert!((overage - 0.00014).abs() < 1e-12, "overage {overage}");
+        let health: Value = serde_json::from_str(
+            &ureq::get(&format!("http://127.0.0.1:{port}/healthz"))
+                .call()
+                .unwrap()
+                .into_string()
+                .unwrap(),
+        )
+        .unwrap();
+        let spent = health["spent_usd"].as_f64().unwrap();
+        assert!((spent - 0.00001).abs() < 1e-12, "spent {spent}");
+        assert!(spent <= 5.0);
+    }
+
+    #[test]
+    fn concurrent_audit_lines_are_well_formed() {
+        let (upstream, _, _) = fake_upstream("ok");
+        let dir = temp_dir("audit-concurrent");
+        let audit = dir.join("audit.jsonl");
+        let mut config = config_for(upstream, audit.clone(), 1.0, 1.0, 1.0);
+        config.max_request_tokens = 150;
+        config.rate_limit = 0;
+        let (port, _) = start(config);
+        let handles: Vec<_> = (0..100)
+            .map(|_| thread::spawn(move || post(port, "broker-secret", body()).0))
+            .collect();
+        let statuses: Vec<u16> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        assert_eq!(statuses.iter().filter(|s| **s == 200).count(), 100);
+        let text = fs::read_to_string(&audit).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 100);
+        for line in lines {
+            let event: Value = serde_json::from_str(line).unwrap();
+            assert_eq!(event["status"], 200);
+        }
+    }
+
+    #[test]
+    fn bad_requests_are_audited() {
+        let (upstream, _, _) = fake_upstream("ok");
+        let dir = temp_dir("bad-audit");
+        let audit = dir.join("audit.jsonl");
+        let (port, _) = start_broker(upstream, audit.clone(), 5.0, 1.0, 1.0);
+        assert_eq!(post(port, "broker-secret", "not json").0, 400);
+        assert_eq!(
+            post(port, "broker-secret", r#"{"model":"m","stream":true}"#).0,
+            400
+        );
+        let text = fs::read_to_string(&audit).unwrap();
+        let reasons: Vec<String> = text
+            .lines()
+            .map(|l| {
+                serde_json::from_str::<Value>(l).unwrap()["reason"]
+                    .as_str()
+                    .unwrap()
+                    .to_string()
+            })
+            .collect();
+        assert_eq!(
+            reasons,
+            vec!["invalid JSON", "streaming is not supported"]
+        );
     }
 }
