@@ -6,12 +6,15 @@
 //!
 //! Rust port of `src/vkeys/broker.py`; behaviour is kept in lockstep.
 
+use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
+use std::hash::{Hash, Hasher};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
@@ -20,6 +23,12 @@ pub const DEFAULT_UPSTREAM: &str = "https://openrouter.ai/api/v1";
 pub const MAX_BODY: usize = 10_000_000;
 pub const TIMEOUT_SECS: u64 = 120;
 
+const DEFAULT_RATE_LIMIT: u32 = 60;
+const DEFAULT_RATE_WINDOW_SECS: u64 = 60;
+/// Worst-case tokens billed for one request. Budget is reserved against this
+/// before the upstream reply arrives so concurrent requests cannot overshoot.
+const DEFAULT_MAX_REQUEST_TOKENS: u64 = 200_000;
+
 #[derive(Clone)]
 pub struct Config {
     pub host: String,
@@ -27,30 +36,137 @@ pub struct Config {
     pub upstream: String,
     pub provider_key: String,
     pub broker_token: String,
+    /// Accepted during rotation alongside `broker_token`; remove after clients
+    /// have moved over.
+    pub previous_token: Option<String>,
     pub audit: PathBuf,
     pub budget_usd: f64,
     pub price_in: f64,
     pub price_out: f64,
+    /// Requests per client per window. 0 disables the limiter.
+    pub rate_limit: u32,
+    pub rate_window_secs: u64,
+    pub max_request_tokens: u64,
 }
 
 pub struct State {
-    spent_usd: Mutex<f64>,
+    ledger: Mutex<Ledger>,
+    rate: Mutex<HashMap<u64, Window>>,
+}
+
+struct Ledger {
+    spent_usd: f64,
+    reserved_usd: f64,
+}
+
+struct Window {
+    start: Instant,
+    count: u32,
 }
 
 impl State {
     pub fn new() -> Self {
         Self {
-            spent_usd: Mutex::new(0.0),
+            ledger: Mutex::new(Ledger {
+                spent_usd: 0.0,
+                reserved_usd: 0.0,
+            }),
+            rate: Mutex::new(HashMap::new()),
         }
     }
 
     pub fn spent(&self) -> f64 {
-        *self.spent_usd.lock().unwrap_or_else(|e| e.into_inner())
+        self.lock_ledger().spent_usd
     }
 
-    fn add(&self, cost: f64) {
-        let mut spent = self.spent_usd.lock().unwrap_or_else(|e| e.into_inner());
-        *spent += cost;
+    fn lock_ledger(&self) -> std::sync::MutexGuard<'_, Ledger> {
+        self.ledger.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Atomically reserve worst-case spend for one request. `None` means the
+    /// budget cannot admit another request.
+    fn reserve(&self, config: &Config) -> Option<Reservation<'_>> {
+        if config.budget_usd <= 0.0 {
+            return Some(Reservation {
+                state: self,
+                amount: 0.0,
+            });
+        }
+        let ceiling =
+            config.max_request_tokens as f64 * config.price_in.max(config.price_out) / 1_000_000.0;
+        let mut ledger = self.lock_ledger();
+        let remaining = config.budget_usd - ledger.spent_usd - ledger.reserved_usd;
+        if remaining <= 0.0 {
+            return None;
+        }
+        // ponytail: a budget below one request's ceiling admits one request at
+        // a time rather than deadlocking; raise the ceiling to allow more.
+        let amount = if ceiling > config.budget_usd {
+            remaining
+        } else if remaining >= ceiling {
+            ceiling
+        } else {
+            return None;
+        };
+        ledger.reserved_usd += amount;
+        Some(Reservation {
+            state: self,
+            amount,
+        })
+    }
+
+    fn settle(&self, reserved: f64, actual: f64) {
+        let mut ledger = self.lock_ledger();
+        ledger.reserved_usd -= reserved;
+        ledger.spent_usd += actual;
+    }
+
+    fn release(&self, reserved: f64) {
+        let mut ledger = self.lock_ledger();
+        ledger.reserved_usd -= reserved;
+    }
+
+    fn allow(&self, key: u64, limit: u32, window_secs: u64) -> bool {
+        if limit == 0 || window_secs == 0 {
+            return true;
+        }
+        let window = Duration::from_secs(window_secs);
+        let now = Instant::now();
+        let mut map = self.rate.lock().unwrap_or_else(|e| e.into_inner());
+        map.retain(|_, w| now.duration_since(w.start) < window);
+        let entry = map.entry(key).or_insert(Window {
+            start: now,
+            count: 0,
+        });
+        if now.duration_since(entry.start) >= window {
+            entry.start = now;
+            entry.count = 0;
+        }
+        if entry.count >= limit {
+            return false;
+        }
+        entry.count += 1;
+        true
+    }
+}
+
+struct Reservation<'a> {
+    state: &'a State,
+    amount: f64,
+}
+
+impl Reservation<'_> {
+    fn commit(mut self, actual: f64) {
+        self.state.settle(self.amount, actual);
+        self.amount = 0.0; // Drop releases nothing after commit.
+    }
+}
+
+impl Drop for Reservation<'_> {
+    fn drop(&mut self) {
+        if self.amount != 0.0 {
+            self.state.release(self.amount);
+        }
     }
 }
 
@@ -102,10 +218,18 @@ pub fn local_timestamp() -> String {
         .to_string()
 }
 
+fn env_or<T: std::str::FromStr>(name: &str, default: T) -> T {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(default)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn config_with(
     provider_key: Option<String>,
     broker_token: Option<String>,
+    previous_token: Option<String>,
     host: String,
     port: u16,
     upstream: String,
@@ -113,6 +237,9 @@ pub fn config_with(
     budget_usd: f64,
     price_in: f64,
     price_out: f64,
+    rate_limit: u32,
+    rate_window_secs: u64,
+    max_request_tokens: u64,
 ) -> Result<Config, String> {
     let provider_key = provider_key.unwrap_or_default();
     let broker_token = broker_token.unwrap_or_default();
@@ -128,10 +255,18 @@ pub fn config_with(
         upstream,
         provider_key,
         broker_token,
+        previous_token: previous_token.filter(|t| !t.is_empty()),
         audit,
         budget_usd,
         price_in,
         price_out,
+        rate_limit,
+        rate_window_secs,
+        max_request_tokens: if max_request_tokens == 0 {
+            DEFAULT_MAX_REQUEST_TOKENS
+        } else {
+            max_request_tokens
+        },
     })
 }
 
@@ -148,6 +283,7 @@ pub fn config_from_env(
     config_with(
         std::env::var("OPENROUTER_API_KEY").ok(),
         std::env::var("VKEYS_BROKER_TOKEN").ok(),
+        std::env::var("VKEYS_BROKER_TOKEN_PREVIOUS").ok(),
         host,
         port,
         upstream,
@@ -155,6 +291,12 @@ pub fn config_from_env(
         budget_usd,
         price_in,
         price_out,
+        env_or("VKEYS_BROKER_RATE_LIMIT", DEFAULT_RATE_LIMIT),
+        env_or("VKEYS_BROKER_RATE_WINDOW_SECS", DEFAULT_RATE_WINDOW_SECS),
+        env_or(
+            "VKEYS_BROKER_MAX_REQUEST_TOKENS",
+            DEFAULT_MAX_REQUEST_TOKENS,
+        ),
     )
 }
 
@@ -189,29 +331,34 @@ fn handle(request: Request, config: &Config, state: &State) {
 }
 
 fn post_chat(mut request: Request, config: &Config, state: &State) {
-    if !authorized(&request, &config.broker_token) {
-        audit(
-            config,
-            json!({
-                "ts": local_timestamp(), "status": 401, "model": Value::Null,
-                "prompt_tokens": 0, "completion_tokens": 0, "cost_usd": 0.0,
-            }),
+    // Both buckets must allow: an unauthenticated flood is capped per peer IP,
+    // and real clients are additionally capped per presented token.
+    let allowed = state.allow(ip_key(&request), config.rate_limit, config.rate_window_secs)
+        && state.allow(
+            token_key(&request),
+            config.rate_limit,
+            config.rate_window_secs,
         );
+    if !allowed {
+        audit(config, refusal_event(429, "rate limited"));
+        respond_json(request, 429, json!({"error": "rate limited"}));
+        return;
+    }
+
+    if !authorized(&request, config) {
+        audit(config, refusal_event(401, "invalid broker token"));
         respond_json(request, 401, json!({"error": "invalid broker token"}));
         return;
     }
 
-    if config.budget_usd > 0.0 && state.spent() >= config.budget_usd {
-        audit(
-            config,
-            json!({
-                "ts": local_timestamp(), "status": 429, "model": Value::Null,
-                "prompt_tokens": 0, "completion_tokens": 0, "cost_usd": 0.0,
-            }),
-        );
-        respond_json(request, 429, json!({"error": "budget exhausted"}));
-        return;
-    }
+    let reservation = match state.reserve(config) {
+        Some(reservation) => reservation,
+        None => {
+            audit(config, refusal_event(429, "budget exhausted"));
+            respond_json(request, 429, json!({"error": "budget exhausted"}));
+            return;
+        }
+    };
 
     let length = content_length(&request);
     if length == 0 || length > MAX_BODY {
@@ -281,7 +428,7 @@ fn post_chat(mut request: Request, config: &Config, state: &State) {
             + completion_tokens as f64 * config.price_out)
             / 1_000_000.0;
     }
-    state.add(cost);
+    reservation.commit(cost);
 
     audit(
         config,
@@ -297,13 +444,46 @@ fn post_chat(mut request: Request, config: &Config, state: &State) {
     respond(request, status, response_body, &content_type);
 }
 
-fn authorized(request: &Request, token: &str) -> bool {
+fn bearer(request: &Request) -> Option<&str> {
     request
         .headers()
         .iter()
         .find(|h| h.field.equiv("Authorization"))
-        .map(|h| h.value.as_str() == format!("Bearer {token}"))
-        .unwrap_or(false)
+        .and_then(|h| h.value.as_str().strip_prefix("Bearer "))
+}
+
+fn authorized(request: &Request, config: &Config) -> bool {
+    let Some(token) = bearer(request) else {
+        return false;
+    };
+    token == config.broker_token || config.previous_token.as_deref() == Some(token)
+}
+
+/// Limiter keys. Only the hashes are kept in memory, never the token itself.
+fn ip_key(request: &Request) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    0u8.hash(&mut hasher);
+    request.remote_addr().map(|a| a.ip()).hash(&mut hasher);
+    hasher.finish()
+}
+
+fn token_key(request: &Request) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    1u8.hash(&mut hasher);
+    bearer(request).unwrap_or("").hash(&mut hasher);
+    hasher.finish()
+}
+
+fn refusal_event(status: u16, reason: &str) -> Value {
+    json!({
+        "ts": local_timestamp(),
+        "status": status,
+        "model": Value::Null,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "cost_usd": 0.0,
+        "reason": reason,
+    })
 }
 
 fn content_length(request: &Request) -> usize {
@@ -471,24 +651,32 @@ mod tests {
         dir
     }
 
-    fn start_broker(
+    fn config_for(
         upstream_port: u16,
         audit: PathBuf,
         budget: f64,
         price_in: f64,
         price_out: f64,
-    ) -> (u16, Arc<Config>) {
-        let config = Arc::new(Config {
+    ) -> Config {
+        Config {
             host: "127.0.0.1".to_string(),
             port: 0,
             upstream: format!("http://127.0.0.1:{upstream_port}/v1"),
             provider_key: "provider-secret".to_string(),
             broker_token: "broker-secret".to_string(),
+            previous_token: None,
             audit,
             budget_usd: budget,
             price_in,
             price_out,
-        });
+            rate_limit: 1000,
+            rate_window_secs: 60,
+            max_request_tokens: DEFAULT_MAX_REQUEST_TOKENS,
+        }
+    }
+
+    fn start(config: Config) -> (u16, Arc<Config>) {
+        let config = Arc::new(config);
         let server = bind(&config).unwrap();
         let port = server.server_addr().to_ip().unwrap().port();
         let state = Arc::new(State::new());
@@ -496,6 +684,22 @@ mod tests {
         let st = Arc::clone(&state);
         thread::spawn(move || serve(server, cfg, st));
         (port, config)
+    }
+
+    fn start_broker(
+        upstream_port: u16,
+        audit: PathBuf,
+        budget: f64,
+        price_in: f64,
+        price_out: f64,
+    ) -> (u16, Arc<Config>) {
+        start(config_for(
+            upstream_port,
+            audit,
+            budget,
+            price_in,
+            price_out,
+        ))
     }
 
     fn post(port: u16, token: &str, body: &str) -> (u16, String) {
@@ -607,13 +811,73 @@ mod tests {
     }
 
     #[test]
+    fn rate_limit_returns_429() {
+        let (upstream, _) = fake_upstream("ok");
+        let dir = temp_dir("rate");
+        let mut config = config_for(upstream, dir.join("audit.jsonl"), 5.0, 0.0, 0.0);
+        config.rate_limit = 1;
+        let (port, _) = start(config);
+        assert_eq!(post(port, "broker-secret", body()).0, 200);
+        let (status, reply) = post(port, "broker-secret", body());
+        assert_eq!(status, 429);
+        assert!(reply.contains("rate limited"));
+        // An unauthenticated flood is capped by the same IP bucket.
+        assert_eq!(post(port, "wrong", body()).0, 429);
+    }
+
+    #[test]
+    fn previous_token_allows_rotation() {
+        let (upstream, _) = fake_upstream("ok");
+        let dir = temp_dir("rotate");
+        let mut config = config_for(upstream, dir.join("audit.jsonl"), 5.0, 0.0, 0.0);
+        config.previous_token = Some("old-secret".to_string());
+        let (port, _) = start(config);
+        assert_eq!(post(port, "broker-secret", body()).0, 200);
+        assert_eq!(post(port, "old-secret", body()).0, 200);
+    }
+
+    #[test]
+    fn retired_token_is_rejected() {
+        let (upstream, _) = fake_upstream("ok");
+        let dir = temp_dir("retired");
+        let (port, _) = start_broker(upstream, dir.join("audit.jsonl"), 5.0, 0.0, 0.0);
+        assert_eq!(post(port, "old-secret", body()).0, 401);
+    }
+
+    #[test]
+    fn budget_is_atomic_under_concurrency() {
+        let (upstream, calls) = fake_upstream("ok");
+        let dir = temp_dir("atomic-budget");
+        // Each call costs (100 + 50) tokens = 0.00015 USD at 1.0/1.0.
+        let mut config = config_for(upstream, dir.join("audit.jsonl"), 0.00031, 1.0, 1.0);
+        config.max_request_tokens = 150;
+        config.rate_limit = 0;
+        let (port, _) = start(config);
+        let handles: Vec<_> = (0..20)
+            .map(|_| thread::spawn(move || post(port, "broker-secret", body()).0))
+            .collect();
+        let statuses: Vec<u16> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        assert_eq!(statuses.iter().filter(|s| **s == 200).count(), 2);
+        assert_eq!(statuses.iter().filter(|s| **s == 429).count(), 18);
+        assert_eq!(calls.lock().unwrap().len(), 2);
+        let health: Value = serde_json::from_str(
+            &ureq::get(&format!("http://127.0.0.1:{port}/healthz"))
+                .call()
+                .unwrap()
+                .into_string()
+                .unwrap(),
+        )
+        .unwrap();
+        let spent = health["spent_usd"].as_f64().unwrap();
+        assert!(spent > 0.0);
+        assert!(spent <= 0.00031 + 1e-9, "spent {spent} overshot the budget");
+    }
+
+    #[test]
     fn config_requires_both_secrets() {
-        let err = config_with(None, None, "127.0.0.1".into(), 0, DEFAULT_UPSTREAM.into(), PathBuf::from("a"), 5.0, 0.0, 0.0)
-            .err()
-            .unwrap();
-        assert!(err.contains("OPENROUTER_API_KEY"));
         let err = config_with(
-            Some("provider".into()),
+            None,
+            None,
             None,
             "127.0.0.1".into(),
             0,
@@ -622,6 +886,27 @@ mod tests {
             5.0,
             0.0,
             0.0,
+            60,
+            60,
+            200_000,
+        )
+        .err()
+        .unwrap();
+        assert!(err.contains("OPENROUTER_API_KEY"));
+        let err = config_with(
+            Some("provider".into()),
+            None,
+            None,
+            "127.0.0.1".into(),
+            0,
+            DEFAULT_UPSTREAM.into(),
+            PathBuf::from("a"),
+            5.0,
+            0.0,
+            0.0,
+            60,
+            60,
+            200_000,
         )
         .err()
         .unwrap();

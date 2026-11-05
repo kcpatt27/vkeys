@@ -56,40 +56,89 @@ API key:  <broker/token value, not the provider key>
 
 - refuses to start without `OPENROUTER_API_KEY` or `VKEYS_BROKER_TOKEN`
 - bearer-token auth on chat completions
+- rate limits each client (peer IP + presented token) with 429; default 60
+  requests per 60 seconds
+- atomically reserves worst-case spend per request before calling upstream;
+  refuses with 429 once the in-memory budget is exhausted
 - proxies non-streaming JSON to the upstream
 - injects `Authorization: Bearer <provider key>` only upstream
 - parses `usage.prompt_tokens` / `usage.completion_tokens`
 - computes cost from `--price-in` / `--price-out` (USD per 1M tokens)
-- refuses with 429 once the in-memory budget is exhausted
 - appends an audit line per request: timestamp, status, model, token counts,
-  cost; never prompt text, completion text, or keys
+  cost; refusals also carry a reason. Never prompt text, completion text, or
+  keys
 - no `vkeys get`, no generic command, no streaming, no tools
+
+## Environment
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `VKEYS_BROKER_TOKEN` | required | current broker token |
+| `VKEYS_BROKER_TOKEN_PREVIOUS` | unset | old token still accepted during rotation |
+| `VKEYS_BROKER_RATE_LIMIT` | `60` | requests per client per window; `0` disables |
+| `VKEYS_BROKER_RATE_WINDOW_SECS` | `60` | limiter window in seconds; `0` disables |
+| `VKEYS_BROKER_MAX_REQUEST_TOKENS` | `200000` | worst-case billed tokens per request, used for budget reservation |
+
+Limits apply to the peer IP and the presented token; both buckets must allow a
+request. This caps unauthenticated floods per IP while giving each token its own
+budget. Rate and spend state live in memory and reset when the broker restarts.
+
+## Token rotation
+
+Two tokens can be valid at once so rotation needs no downtime for clients:
+
+1. Generate a new broker token and store it in vkeys (for example
+   `vkeys set broker/token-next`).
+2. Set `VKEYS_BROKER_TOKEN` to the new token and
+   `VKEYS_BROKER_TOKEN_PREVIOUS` to the current token, then restart the broker.
+3. Move clients to the new token.
+4. Unset `VKEYS_BROKER_TOKEN_PREVIOUS` and restart the broker. The old token
+   is now rejected with 401.
+
+The provider key is not rotated by this procedure; rotate it separately in
+OpenRouter and update `openrouter/broker`.
 
 ## Remote Ravens
 
-The default is `127.0.0.1`. To serve a Pi or another machine, bind to a Tailscale
-address and keep the broker off the public internet:
+The default is `127.0.0.1`: only local processes can connect. To serve a Pi or
+another machine, bind to a Tailscale address and keep the broker off the public
+internet:
 
 ```powershell
 vkeys-broker --host 100.x.y.z --port 8787 ...
 ```
 
-The Pi gets the broker token, never the provider key. Use the tailnet ACL and
-the broker token together; do not expose the port publicly.
+The Pi gets the broker token, never the provider key.
+
+Binding is only half the control. Also:
+
+- **Firewall:** allow the broker port on the Tailscale interface only (for
+  example a Windows inbound rule scoped to the Tailscale adapter, or
+  `ufw allow in on tailscale0 to any port 8787` on Linux). Do not create a
+  router port-forward or a public listener.
+- **Tailnet ACL:** restrict the port to the tags/users that need it (Pi, laptop)
+  so other tailnet devices cannot reach it even with the port open.
+- **Never bind `0.0.0.0`** on a host with a public interface. Loopback plus a
+  tailnet address is the intended deployment.
+- The broker token is still required on the tailnet. Treat any device that can
+  reach the port as untrusted until the token check passes.
 
 ## Limits
 
-- spend is in memory and resets when the broker restarts
+- spend and rate state are in memory and reset when the broker restarts
+- budget reservation uses `VKEYS_BROKER_MAX_REQUEST_TOKENS` as the per-request
+  ceiling. If the ceiling is larger than the whole budget, requests are
+  admitted one at a time; raise the budget or lower the ceiling for parallelism
 - one provider (OpenRouter) and one upstream
 - no streaming; a client that sends `"stream": true` gets 400
-- no per-client budgets yet; the token is shared until client identities exist
+- per-client tokens and per-client budgets are deferred to ticket 011
 - no persistent request queue, retries, or model allowlist yet
 
 ## Tests
 
 ```powershell
 cd rust
-cargo test --release          # 7 broker tests, local fake upstream
+cargo test --release          # 11 broker tests, local fake upstream
 ```
 
 The broker tests use a local fake upstream. They never read the real vault,

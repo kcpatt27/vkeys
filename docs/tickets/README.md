@@ -12,7 +12,7 @@ Committed local ticket queue (no external tracker yet). One file per ticket.
 | 006 | x64 release artifacts | P0 | open |
 | 007 | Verify ARM/macOS artifacts | P1 | open |
 | 008 | Claims + vault note update | P0 | open |
-| 009 | Broker hardening | P1 | open |
+| 009 | Broker hardening | P1 | done |
 | 010 | Portable vault + key export/import | P2 | open |
 | 011 | Per-client broker budgets | P3 | open |
 | 012 | Vault locking | P3 | open |
