@@ -126,3 +126,64 @@ jobs:
           name: vkeys-aarch64-pc-windows-msvc
           if-no-files-found: error
           path: rust/dist/*.zip
+
+  linux-x64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: taiki-e/install-action@cross
+      - name: build
+        working-directory: rust
+        run: cross build --release --target x86_64-unknown-linux-musl
+      - name: package
+        working-directory: rust
+        run: |
+          set -euo pipefail
+          name="vkeys-${GITHUB_REF_NAME}-x86_64-unknown-linux-musl"
+          mkdir -p "dist/$name"
+          cp "target/x86_64-unknown-linux-musl/release/vkeys" \
+             "target/x86_64-unknown-linux-musl/release/vkeys-broker" \
+             ../README.md ../LICENSE "dist/$name/"
+          tar -czf "dist/$name.tar.gz" -C "dist/$name" .
+          sha256sum "dist/$name.tar.gz" > "dist/$name.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vkeys-x86_64-unknown-linux-musl
+          if-no-files-found: error
+          path: |
+            rust/dist/*.tar.gz
+            rust/dist/*.sha256
+
+  windows-x64:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: test
+        run: cargo test --release
+      - name: build
+        run: cargo build --release
+      - name: package
+        run: |
+          $name = "vkeys-$env:GITHUB_REF_NAME-x86_64-pc-windows-msvc"
+          New-Item -ItemType Directory -Force "dist\$name" | Out-Null
+          Copy-Item target\release\vkeys.exe,target\release\vkeys-broker.exe "dist\$name\"
+          Copy-Item ..\README.md,..\LICENSE "dist\$name\"
+          Compress-Archive -Path "dist\$name\*" -DestinationPath "dist\$name.zip" -Force
+          Get-FileHash "dist\$name.zip" -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  $name.zip" } |
+            Set-Content "dist\$name.zip.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vkeys-x86_64-pc-windows-msvc
+          if-no-files-found: error
+          path: |
+            rust/dist/*.zip
+            rust/dist/*.sha256
