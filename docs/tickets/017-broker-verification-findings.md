@@ -21,7 +21,9 @@ Fix:
 - reject `max_tokens > max_request_tokens` with HTTP 400
   `{"error":"max_tokens exceeds broker ceiling"}` and audit the refusal
 - reject `max_tokens == 0` with HTTP 400 `{"error":"max_tokens must be at least 1"}`
-- inject `max_tokens = max_request_tokens` when the field is absent
+- leave a missing `max_tokens` unchanged; the ledger cap handles overage. A
+  re-verification found that injecting the 200k ceiling broke models with lower
+  output limits, so injection was removed.
 - cap the ledger at the reservation on settle and audit `overage_usd`
   (actual - reserved); the ledger never exceeds `budget_usd`
 - document that the provider may still bill overage if the upstream ignores

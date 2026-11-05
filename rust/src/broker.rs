@@ -423,9 +423,7 @@ fn post_chat(mut request: Request, config: &Config, state: &State) {
     // asks for more than the ceiling is refused; a client that omits the field
     // gets the ceiling injected.
     match payload.get("max_tokens") {
-        None | Some(Value::Null) => {
-            payload["max_tokens"] = json!(config.max_request_tokens);
-        }
+        None | Some(Value::Null) => {}
         Some(v) => {
             let n = v.as_f64().filter(|n| n.is_finite() && *n >= 0.0);
             match n {
@@ -1110,7 +1108,7 @@ mod tests {
     }
 
     #[test]
-    fn absent_max_tokens_is_injected() {
+    fn absent_max_tokens_is_forwarded_unchanged() {
         let (upstream, _, bodies) = fake_upstream("ok");
         let dir = temp_dir("inject");
         let mut config = config_for(upstream, dir.join("audit.jsonl"), 5.0, 1.0, 1.0);
@@ -1118,7 +1116,7 @@ mod tests {
         let (port, _) = start(config);
         assert_eq!(post(port, "broker-secret", body()).0, 200);
         let sent: Value = serde_json::from_str(bodies.lock().unwrap().last().unwrap()).unwrap();
-        assert_eq!(sent["max_tokens"], 1234);
+        assert!(sent.get("max_tokens").is_none());
     }
 
     #[test]

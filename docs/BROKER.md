@@ -62,7 +62,8 @@ API key:  <broker/token value, not the provider key>
   refuses with 429 once the in-memory budget is exhausted
 - parses the request JSON before forwarding: a `max_tokens` above
   `VKEYS_BROKER_MAX_REQUEST_TOKENS` is refused with 400, a zero `max_tokens` is
-  refused with 400, and a missing `max_tokens` is set to that ceiling
+  refused with 400, and a missing `max_tokens` is left unchanged; the ledger is
+  capped at the reservation and overage is audited
 - proxies non-streaming JSON to the upstream
 - injects `Authorization: Bearer <provider key>` only upstream
 - parses `usage.prompt_tokens` / `usage.completion_tokens`
@@ -156,7 +157,7 @@ Binding is only half the control. Also:
 
 ```powershell
 cd rust
-cargo test --release          # 18 broker tests, local fake upstream
+cargo test --release          # 19 broker tests, local fake upstream
 ```
 
 The broker tests use a local fake upstream. They never read the real vault,
