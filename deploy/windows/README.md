@@ -1,6 +1,9 @@
-# Windows — hardened broker
+# Windows - hardened broker
 
-Runs the Tier 2 broker as **SYSTEM** via a startup scheduled task. The vault,
+Status: implemented and syntax-checked; not yet run elevated on a live Windows
+host (ticket 004).
+
+Installs the Tier 2 broker as **SYSTEM** via a startup scheduled task. The vault,
 master key, and profiles live in `C:\ProgramData\vkeys-broker`, ACLed to
 **SYSTEM + Administrators only**. The agent user (`kcpat`) cannot read them; it
 gets only `%APPDATA%\vkeys\broker.token` (use-only).

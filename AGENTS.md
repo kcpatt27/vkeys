@@ -1,4 +1,4 @@
-# AGENTS.md — vkeys conventions
+# AGENTS.md - vkeys conventions
 
 ## What this is
 
@@ -19,7 +19,9 @@ Personal, machine-wide key store (`vkeys` = virtual keys). See `README.md` and
 
 - Never commit on `main`; branch per change (`feat/…`, `fix/…`), merge
   `--ff-only`, delete the branch. Worktree for parallel work.
-- No secrets in the repo, ever. `profiles.toml` is local and git-ignored.
+- No secrets in the repo, ever. A personal `profiles.toml` is local and
+  git-ignored; the Raven deploy template `deploy/raven/profiles.toml` is
+  tracked because it holds vault key names only, no values.
 
 ## Gate
 

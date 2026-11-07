@@ -51,6 +51,15 @@ run it without a human typing the profile name. The crate is published from
   (Raven tested both; ship musl).
 - macOS: universal (`x86_64` + `arm64`) via `lipo`, with a slice assertion.
 - Windows ARM64: native `windows-11-arm`, PE machine asserted as `0xAA64`.
+- Linux x64: `x86_64-unknown-linux-musl` via `cross`, on `ubuntu-latest`.
+- Windows x64: `x86_64-pc-windows-msvc` on `windows-latest`, runs
+  `cargo test --release` before building.
+
+The two x64 jobs package both binaries plus `LICENSE` and `README`, and each
+emits a SHA-256 sidecar (`<archive>.sha256`). The ARM64 Linux and Windows ARM64
+jobs package the binaries only and emit no checksum; the macOS job packages the
+binaries only but does emit a `.sha256` sidecar. Add the licence, readme, and a
+checksum to any archive before shipping it.
 
 Run it manually, or let a published GitHub release trigger it. Download the
 artifacts and attach them to the release.

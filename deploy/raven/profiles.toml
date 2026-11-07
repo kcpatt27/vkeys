@@ -1,0 +1,10 @@
+# Installed to /etc/vkeys/profiles.toml, owned by the vkeys system user (0600).
+# The broker binds loopback; Raven's agent talks to it locally.
+
+[profile.openrouter-broker]
+cmd = ["/usr/local/bin/vkeys-broker", "--host", "127.0.0.1", "--port", "8787", "--budget-usd", "5.00", "--price-in", "0.30", "--price-out", "1.20", "--audit", "/var/lib/vkeys/audit.jsonl"]
+agent-ok = true
+
+[profile.openrouter-broker.keys]
+OPENROUTER_API_KEY = "openrouter/broker"
+VKEYS_BROKER_TOKEN = "broker/token"

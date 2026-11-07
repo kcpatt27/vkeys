@@ -2,8 +2,13 @@
 __pycache__/
 *.pyc
 profiles.toml
+# The Raven deploy template carries vault key names only, no values, and the
+# installer needs it present in a fresh clone. Personal profiles.toml files
+# stay ignored everywhere else.
+!deploy/raven/profiles.toml
 .scratch/
 rust/target/
+dist/
 demo/demo-vault.bin
 demo/audit.jsonl
 demo/out/

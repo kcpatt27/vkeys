@@ -33,7 +33,8 @@ AGENT_TOKEN="$AGENT_HOME/.config/vkeys/broker.token"
 die() { echo "error: $*" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "run with sudo"
-[[ -x "$BIN_DIR/vkeys" && -x "$BIN_DIR/vkeys-broker" ]] || die "vkeys binaries not found in $BIN_DIR"
+[[ -f "$BIN_DIR/vkeys" && -f "$BIN_DIR/vkeys-broker" ]] || die "vkeys binaries not found in $BIN_DIR"
+chmod +x "$BIN_DIR/vkeys" "$BIN_DIR/vkeys-broker"
 
 vkeys_as_service() {
   runuser -u "$SERVICE_USER" -- env \

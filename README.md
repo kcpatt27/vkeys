@@ -1,11 +1,11 @@
-# vkeys — virtual keys
+# vkeys - virtual keys
 
 [![ci](https://github.com/kcpatt27/vkeys/actions/workflows/ci.yml/badge.svg)](https://github.com/kcpatt27/vkeys/actions/workflows/ci.yml)
 
 ![vkeys demo](https://raw.githubusercontent.com/kcpatt27/vkeys/main/docs/assets/demo.gif)
 
 Personal, machine-wide key store for Windows, macOS, and Linux. Keys are stored
-once, encrypted at rest, and **injected into named profiles** — an agent can
+once, encrypted at rest, and **injected into named profiles** - an agent can
 *use* a key but has no command that prints it.
 
 Name: **vkeys** = "virtual keys". Deliberately not `keys` / `secret` / `vault`
@@ -57,7 +57,7 @@ Tier 1: profiles + no `get` + clean env + output scrubbing + audit + provider
 spend caps. This makes accidental/drive-by exposure very hard.
 
 Honest boundary: `vault.bin` is DPAPI **CurrentUser**. It stops other Windows
-accounts and disk theft, but any process running as you — including an agent —
+accounts and disk theft, but any process running as you - including an agent -
 can decrypt it with a small script. Tier 2 is `vkeys-broker`: the provider key
 stays in the broker process and never enters the client. See `docs/BROKER.md`.
 
@@ -66,6 +66,9 @@ stays in the broker process and never enters the client. See `docs/BROKER.md`.
 key readable only by that user. The agent's user then cannot decrypt the vault at
 all; it gets a use-only broker token. See [`deploy/raven/`](deploy/raven/) and
 [`deploy/windows/`](deploy/windows/).
+
+The Linux path is verified on Raven (ticket 003). The Windows SYSTEM path is
+implemented but has not been verified on a live host (ticket 004).
 
 ## Store
 
@@ -115,8 +118,10 @@ The Python oracle is archived at tag `python-oracle-final`; `PORT.md` is its rec
 
 ```powershell
 cd rust
-cargo test --release        # CLI + 7 broker tests
+cargo test --release        # 3 CLI + 19 broker + 3 unit tests
 ```
+
+CI is manual-only while the repo is private (ticket 015).
 
 See `PORT.md` (historical) for the Python parity record.
 

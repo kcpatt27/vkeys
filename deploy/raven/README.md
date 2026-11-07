@@ -1,4 +1,4 @@
-# Raven — hardened broker, one command
+# Raven - hardened broker, one command
 
 Runs the Tier 2 broker as a dedicated **`vkeys` system user**, so the agent user
 (`kcpat`) cannot read `/etc/vkeys/master.key` or `/var/lib/vkeys/vault.bin`. The
@@ -61,5 +61,5 @@ never sees the key."
   provider key.
 - Keep the broker on loopback or the tailnet; never expose `:8787` publicly.
 - The service restarts on failure; the audit log is `/var/lib/vkeys/audit.jsonl`.
-- Windows equivalent (service account + ACLed vault) is not built yet; see the
-  repo README's boundary note.
+- Windows equivalent (`deploy/windows/`) is implemented but has not been
+  verified on a live host yet; see ticket 004.

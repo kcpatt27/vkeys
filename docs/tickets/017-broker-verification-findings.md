@@ -1,4 +1,4 @@
-# 017 — Broker verification findings
+# 017 - Broker verification findings
 
 Status: done · Priority: P1 · Area: security
 
@@ -6,9 +6,9 @@ Status: done · Priority: P1 · Area: security
 
 An independent verifier reviewed the broker hardening from ticket 009. This
 ticket records the findings and what was fixed versus deferred. The fixes
-landed on `fix/broker-budget-audit`.
+landed on `main` in `f384656`, `d0a51fa`, and `e73b16f`.
 
-## HIGH — fixed
+## HIGH - fixed
 
 ### Budget could overshoot
 
@@ -29,8 +29,8 @@ Fix:
 - document that the provider may still bill overage if the upstream ignores
   `max_tokens`; only the broker ledger is capped
 
-Tests: `oversized_max_tokens_is_rejected`, `absent_max_tokens_is_injected`,
-`overage_is_capped_and_audited`.
+Tests: `oversized_max_tokens_is_rejected`, `zero_max_tokens_is_rejected`,
+`absent_max_tokens_is_forwarded_unchanged`, `overage_is_capped_and_audited`.
 
 ### Audit lines corrupted under concurrency
 
@@ -42,7 +42,7 @@ with one `write_all` of a complete line.
 Test: `concurrent_audit_lines_are_well_formed` (100 concurrent successful
 requests, every line parses as JSON).
 
-## MEDIUM — fixed
+## MEDIUM - fixed
 
 - **Config validation:** reject negative or non-finite `budget_usd`,
   `price_in`, `price_out`; reject `budget_usd > 0` when both prices are zero;
@@ -55,7 +55,7 @@ requests, every line parses as JSON).
 - **Shared-IP rate-limit starvation:** documented in `docs/BROKER.md`. The
   check order is unchanged so the unauthenticated flood cap is not weakened.
 
-## LOW — deferred
+## LOW - deferred
 
 Not fixed in this change; none are release blockers.
 

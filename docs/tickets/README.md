@@ -5,8 +5,8 @@ Committed local ticket queue (no external tracker yet). One file per ticket.
 | # | Title | Priority | Status |
 |---|---|---|---|
 | 001 | Privileged transport bundle | P1 | open |
-| 002 | Remove agent-callable transport push | P0 | open |
-| 003 | Raven broker go-live + boundary check | P0 | open |
+| 002 | Remove agent-callable transport push | P0 | done |
+| 003 | Raven broker go-live + boundary check | P0 | done |
 | 004 | Windows SYSTEM broker verification | P0 | open |
 | 005 | Release v0.1 | P0 | open |
 | 006 | x64 release artifacts | P0 | open |
@@ -21,5 +21,6 @@ Committed local ticket queue (no external tracker yet). One file per ticket.
 | 015 | CI re-enable + release triggers | P0 | open |
 | 016 | Broker lifecycle tray (design) | P2 | design |
 | 017 | Broker verification findings | P1 | done |
+| 018 | Transport-to: structured analysis before redo | P1 | open |
 
 Priorities: **P0** release blocker · **P1** security · **P2** post-release · **P3** later.
