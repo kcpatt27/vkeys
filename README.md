@@ -68,7 +68,9 @@ all; it gets a use-only broker token. See [`deploy/raven/`](deploy/raven/) and
 [`deploy/windows/`](deploy/windows/).
 
 The Linux path is verified on Raven (ticket 003). The Windows SYSTEM path is
-implemented but has not been verified on a live host (ticket 004).
+verified on a live Windows host for install, health, ACL, and broker use; the
+startup task is registered, but boot start has not been exercised by a reboot
+(ticket 004).
 
 ## Store
 

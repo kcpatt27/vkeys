@@ -24,8 +24,9 @@ or a bypass.
 - On Windows, `deploy/windows/install.ps1` is designed to install the broker as
   SYSTEM and ACL `C:\ProgramData\vkeys-broker` to SYSTEM + Administrators; the
   agent gets only a use-only token. It sets `VKEYS_SCHEME=xchacha20poly1305` so
-  the SYSTEM task can read a key file the agent cannot. This path is implemented
-  but has not been verified on a live Windows host (ticket 004).
+  the SYSTEM task can read a key file the agent cannot. This path is verified on
+  a live Windows host for install, health, ACL, and broker use; boot start is
+  registered but not yet exercised by a reboot (ticket 004).
 - vkeys makes accidental exposure hard, not impossible: no `get`, profiles with
   fixed `argv`, a clean child environment, output scrubbing, and an audit log.
   It is not a sandbox.
