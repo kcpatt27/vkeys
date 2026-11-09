@@ -21,8 +21,11 @@
 param(
     [string]$BinDir = (Join-Path $PSScriptRoot "..\..\rust\target\release"),
     [string]$AgentTokenPath = (Join-Path $env:APPDATA "vkeys\broker.token"),
-    [string]$AgentUser = ((& whoami).Trim()),
+    [string]$AgentUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name,
     [int]$Port = 8787,
+    [double]$BudgetUsd = 5.0,
+    [double]$PriceIn = 0.30,
+    [double]$PriceOut = 1.20,
     [string]$ProviderKeyFile,
     [switch]$NonInteractive,
     [switch]$Uninstall,
@@ -99,7 +102,7 @@ Copy-Item (Join-Path $BinDir "vkeys-broker.exe") $Broker -Force
 $brokerToml = $Broker -replace '\\', '\\\\'
 $profileText = @"
 [profile.openrouter-broker]
-cmd = ["$brokerToml", "--host", "127.0.0.1", "--port", "$Port"]
+cmd = ["$brokerToml", "--host", "127.0.0.1", "--port", "$Port", "--budget-usd", "$BudgetUsd", "--price-in", "$PriceIn", "--price-out", "$PriceOut"]
 agent-ok = true
 
 [profile.openrouter-broker.keys]
