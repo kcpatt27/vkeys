@@ -7,5 +7,6 @@
   clean child environment, output scrubbing, audit log.
 - **Tier 2**: OpenRouter broker (`vkeys-broker`) — broker-token auth, in-memory
   budget, per-request audit, non-streaming.
-- Rust-only; Apache-2.0; CI matrix on Windows, macOS, Linux.
+- Rust-only; Apache-2.0; CI matrix configured for Windows, macOS, and Linux
+  (manual while private; ticket 015 re-enables push runs after the flip).
 - Python oracle archived at tag `python-oracle-final`.

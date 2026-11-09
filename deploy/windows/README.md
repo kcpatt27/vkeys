@@ -28,6 +28,9 @@ pwsh -File .\deploy\windows\install.ps1 -ProviderKeyFile C:\secure\provider.key
 
 or set `$env:VKEYS_PROVIDER_KEY` and pass `-NonInteractive`.
 
+If port 8787 is already in use, pass `-Port <n>`; the agent endpoint becomes
+`http://127.0.0.1:<n>/v1`.
+
 The installer uses the `xchacha20poly1305` vault scheme (not DPAPI), because the
 key file must be readable by the SYSTEM task while remaining unreadable by the
 agent user.
