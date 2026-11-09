@@ -33,13 +33,17 @@ jobs:
           name="vkeys-${GITHUB_REF_NAME}-${{ matrix.target }}"
           mkdir -p "dist/$name"
           cp "target/${{ matrix.target }}/release/vkeys" \
-             "target/${{ matrix.target }}/release/vkeys-broker" "dist/$name/"
+             "target/${{ matrix.target }}/release/vkeys-broker" \
+             ../README.md ../LICENSE "dist/$name/"
           tar -czf "dist/$name.tar.gz" -C "dist/$name" .
+          sha256sum "dist/$name.tar.gz" > "dist/$name.tar.gz.sha256"
       - uses: actions/upload-artifact@v4
         with:
           name: vkeys-${{ matrix.target }}
           if-no-files-found: error
-          path: rust/dist/*.tar.gz
+          path: |
+            rust/dist/*.tar.gz
+            rust/dist/*.sha256
 
   macos-universal:
     runs-on: macos-15
@@ -75,7 +79,8 @@ jobs:
         run: |
           set -euo pipefail
           name="vkeys-${GITHUB_REF_NAME}-macos-universal"
-          tar -czf "$name.tar.gz" -C dist/bin vkeys vkeys-broker
+          cp ../README.md ../LICENSE dist/bin/
+          tar -czf "$name.tar.gz" -C dist/bin vkeys vkeys-broker README.md LICENSE
           shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"
       - uses: actions/upload-artifact@v4
         with:
@@ -118,14 +123,20 @@ jobs:
       - name: package
         run: |
           $name = "vkeys-$env:GITHUB_REF_NAME-aarch64-pc-windows-msvc"
-          New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path target\release\vkeys.exe,target\release\vkeys-broker.exe `
-            -DestinationPath "dist\$name.zip" -Force
+          New-Item -ItemType Directory -Force "dist\$name" | Out-Null
+          Copy-Item target\release\vkeys.exe,target\release\vkeys-broker.exe "dist\$name\"
+          Copy-Item ..\README.md,..\LICENSE "dist\$name\"
+          Compress-Archive -Path "dist\$name\*" -DestinationPath "dist\$name.zip" -Force
+          Get-FileHash "dist\$name.zip" -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  $name.zip" } |
+            Set-Content "dist\$name.zip.sha256"
       - uses: actions/upload-artifact@v4
         with:
           name: vkeys-aarch64-pc-windows-msvc
           if-no-files-found: error
-          path: rust/dist/*.zip
+          path: |
+            rust/dist/*.zip
+            rust/dist/*.sha256
 
   linux-x64:
     runs-on: ubuntu-latest

@@ -22,6 +22,9 @@ artifacts to.
 ## Acceptance
 - [x] Add `x86_64-unknown-linux-musl` and `x86_64-pc-windows-msvc` jobs.
 - [x] Include both binaries + LICENSE + README; emit SHA-256.
+- [x] Give every archive the same layout: Linux ARM64 and Windows ARM64 now
+      include LICENSE + README and a SHA-256 sidecar; macOS includes LICENSE and
+      README alongside its existing checksum.
 - [ ] Attach to the release.
 - [ ] Rebuild the x64 jobs at the release commit so the artifacts carry the
       current broker code.
