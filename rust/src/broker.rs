@@ -401,7 +401,7 @@ fn post_chat(mut request: Request, config: &Config, state: &State) {
         return;
     }
 
-    let mut payload: Value = match serde_json::from_slice(&body) {
+    let payload: Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
         Err(_) => {
             audit(config, refusal_event(400, "invalid JSON"));
