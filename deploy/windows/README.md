@@ -5,8 +5,8 @@ host (ticket 004).
 
 Installs the Tier 2 broker as **SYSTEM** via a startup scheduled task. The vault,
 master key, and profiles live in `C:\ProgramData\vkeys-broker`, ACLed to
-**SYSTEM + Administrators only**. The agent user (`kcpat`) cannot read them; it
-gets only `%APPDATA%\vkeys\broker.token` (use-only).
+**SYSTEM + Administrators only**. The agent user cannot read them; it gets
+only `%APPDATA%\vkeys\broker.token` (use-only).
 
 ## Install
 
@@ -37,7 +37,7 @@ agent user.
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8787/healthz
 icacls C:\ProgramData\vkeys-broker\master.key
-# as kcpat (not elevated), this must fail:
+# as the agent user (not elevated), this must fail:
 Get-Content C:\ProgramData\vkeys-broker\master.key
 ```
 

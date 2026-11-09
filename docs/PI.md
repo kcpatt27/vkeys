@@ -54,10 +54,10 @@ broker over the tailnet. The Pi's own vault starts empty.
 
 Use `deploy/raven/install.sh` - one command. It creates a dedicated **`vkeys`
 system user**, installs both binaries, prompts once for the OpenRouter key,
-generates `broker/token`, writes it to `~kcpat/.config/vkeys/broker.token`, and
-enables the service. The vault (`/var/lib/vkeys`) and key
-(`/etc/vkeys/master.key`) are readable only by `vkeys`; the agent user (`kcpat`)
-cannot decrypt them and only gets the use-only token.
+generates `broker/token`, writes it to `~<agent-user>/.config/vkeys/broker.token`,
+and enables the service. The vault (`/var/lib/vkeys`) and key
+(`/etc/vkeys/master.key`) are readable only by `vkeys`; the agent user cannot
+decrypt them and only gets the use-only token.
 
 ```bash
 sudo ./deploy/raven/install.sh "$PWD/rust/target/release"
@@ -65,8 +65,8 @@ curl -s http://127.0.0.1:8787/healthz
 ```
 
 The only interactions are `sudo` and the hidden provider-key prompt. A
-`systemd --user` unit as `kcpat` is fine for a quick test but is **not** a
-boundary against an agent running as `kcpat`. See
+`systemd --user` unit as the agent user is fine for a quick test but is **not** a
+boundary against an agent running as that user. See
 [`deploy/raven/`](../deploy/raven/).
 
 ## Broker go-live (verified 2026-11-07)
@@ -77,7 +77,7 @@ The hardened install is live on Raven:
   `127.0.0.1:8787`.
 - `/healthz` returned `{"budget_usd":5.0,"ok":true,...}` after a real
   completion.
-- The agent user `kcpat` cannot read `/etc/vkeys/master.key`;
+- The agent user cannot read `/etc/vkeys/master.key`;
   `~/.config/vkeys/broker.token` is `0600`.
 - The `openrouter-broker` profile runs with `--budget-usd 5.00 --price-in 0.30
   --price-out 1.20 --audit /var/lib/vkeys/audit.jsonl`.

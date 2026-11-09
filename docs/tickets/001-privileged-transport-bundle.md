@@ -4,7 +4,7 @@ Status: open · Priority: P1 · Area: security / transport
 
 ## Context
 The uncommitted `transport push` is agent-callable: the source vault is DPAPI
-under `kcpat`, so an agent can decrypt and exfiltrate it. SSH encrypts the trip
+under the agent user's account, so an agent can decrypt and exfiltrate it. SSH encrypts the trip
 but does not fix who can start it. Transport must be an admin/service operation.
 
 ## Acceptance

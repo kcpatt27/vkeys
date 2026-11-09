@@ -25,13 +25,14 @@ VAULT="$STATE_DIR/vault.bin"
 KEY_FILE="$CONF_DIR/master.key"
 PROFILES="$CONF_DIR/profiles.toml"
 
-AGENT_USER="${SUDO_USER:-$(logname 2>/dev/null || echo kcpat)}"
+AGENT_USER="${AGENT_USER:-${SUDO_USER:-$(logname 2>/dev/null || true)}}"
 AGENT_HOME="$(getent passwd "$AGENT_USER" | cut -d: -f6 || true)"
 AGENT_HOME="${AGENT_HOME:-/home/$AGENT_USER}"
 AGENT_TOKEN="$AGENT_HOME/.config/vkeys/broker.token"
 
 die() { echo "error: $*" >&2; exit 1; }
 
+[[ -n "$AGENT_USER" ]] || die "cannot determine the agent user; re-run as: AGENT_USER=<name> sudo -E ./deploy/raven/install.sh ..."
 [[ $EUID -eq 0 ]] || die "run with sudo"
 [[ -f "$BIN_DIR/vkeys" && -f "$BIN_DIR/vkeys-broker" ]] || die "vkeys binaries not found in $BIN_DIR"
 chmod +x "$BIN_DIR/vkeys" "$BIN_DIR/vkeys-broker"

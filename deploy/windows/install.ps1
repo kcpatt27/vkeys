@@ -6,7 +6,7 @@
 .DESCRIPTION
   The broker runs as SYSTEM. Its vault, master key, and profiles live in
   C:\ProgramData\vkeys-broker, ACLed to SYSTEM + Administrators only. The agent
-  user (kcpat) cannot read them; it only gets an AppData broker token (use-only).
+  user cannot read them; it only gets an AppData broker token (use-only).
 
   Run in an elevated PowerShell (Run as administrator).
 
@@ -189,5 +189,5 @@ Write-Host "  secrets dir: $DataDir (SYSTEM + Administrators only)"
 Write-Host ""
 Write-Host "Verify the boundary:"
 Write-Host "  icacls `"$KeyFile`""
-Write-Host "  # as kcpat, this must fail:"
+Write-Host "  # as the agent user, this must fail:"
 Write-Host "  Get-Content `"$KeyFile`""

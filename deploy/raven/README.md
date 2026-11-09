@@ -1,8 +1,8 @@
 # Raven - hardened broker, one command
 
 Runs the Tier 2 broker as a dedicated **`vkeys` system user**, so the agent user
-(`kcpat`) cannot read `/etc/vkeys/master.key` or `/var/lib/vkeys/vault.bin`. The
-agent holds only the broker token and can *use* the provider key through
+cannot read `/etc/vkeys/master.key` or `/var/lib/vkeys/vault.bin`. The agent
+holds only the broker token and can *use* the provider key through
 `http://127.0.0.1:8787`.
 
 ## Install
@@ -19,7 +19,7 @@ It will:
 3. publish the `openrouter-broker` profile;
 4. **prompt once** for the OpenRouter provider key (hidden input);
 5. generate `broker/token`, store it, and write it to
-   `~kcpat/.config/vkeys/broker.token` (0600, owned by the agent);
+   `~<agent-user>/.config/vkeys/broker.token` (0600, owned by the agent);
 6. enable and start `vkeys-broker`;
 7. verify `GET /healthz`.
 
@@ -33,9 +33,9 @@ idempotent; an existing provider key and token are left alone.
 ```bash
 sudo systemctl status vkeys-broker --no-pager
 curl -s http://127.0.0.1:8787/healthz
-# as the agent user:
+# as the agent user (replace <agent-user>):
 cat ~/.config/vkeys/broker.token
-sudo -u kcpat test -r /etc/vkeys/master.key && echo "BAD: agent can read key" || echo "ok: key unreadable"
+sudo -u <agent-user> test -r /etc/vkeys/master.key && echo "BAD: agent can read key" || echo "ok: key unreadable"
 ```
 
 ## Reset the broker keys
@@ -44,7 +44,7 @@ The vault is deliberately write-only. To start over:
 
 ```bash
 sudo systemctl stop vkeys-broker
-sudo rm -f /var/lib/vkeys/vault.bin /etc/vkeys/master.key /home/kcpat/.config/vkeys/broker.token
+sudo rm -f /var/lib/vkeys/vault.bin /etc/vkeys/master.key ~<agent-user>/.config/vkeys/broker.token
 sudo ./deploy/raven/install.sh "$PWD/rust/target/release"
 ```
 
