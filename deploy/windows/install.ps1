@@ -52,14 +52,30 @@ function Test-Admin {
 
 function Set-LockedAcl([string]$Path) {
     $isDir = Test-Path -LiteralPath $Path -PathType Container
-    $grant = if ($isDir) { "(OI)(CI)F" } else { "F" }
-    & icacls $Path /inheritance:r /grant:r "*S-1-5-18:$grant" "*S-1-5-32-544:$grant" 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        # A previous run may have left a file owned by another identity.
-        & takeown /f $Path /a 2>&1 | Out-Null
-        & icacls $Path /inheritance:r /grant:r "*S-1-5-18:$grant" "*S-1-5-32-544:$grant" 2>&1 | Out-Null
+    if ($isDir) {
+        $acl = New-Object System.Security.AccessControl.DirectorySecurity
+        $inherit = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor
+                   [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
+    } else {
+        $acl = New-Object System.Security.AccessControl.FileSecurity
+        $inherit = [System.Security.AccessControl.InheritanceFlags]::None
     }
-    if ($LASTEXITCODE -ne 0) { throw "cannot set ACL on $Path" }
+    # Replace the DACL, do not inherit, and keep only SYSTEM + Administrators.
+    # icacls /grant:r leaves other explicit ACEs (including logon-session ACEs)
+    # in place, which let the agent user read the master key.
+    $acl.SetAccessRuleProtection($true, $false)
+    $none = [System.Security.AccessControl.PropagationFlags]::None
+    $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+        'NT AUTHORITY\SYSTEM', 'FullControl', $inherit, $none, 'Allow')))
+    $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+        'BUILTIN\Administrators', 'FullControl', $inherit, $none, 'Allow')))
+    try {
+        Set-Acl -LiteralPath $Path -AclObject $acl -ErrorAction Stop
+    } catch {
+        # A previous run may have left the file owned by another identity.
+        & takeown /f $Path /a 2>&1 | Out-Null
+        Set-Acl -LiteralPath $Path -AclObject $acl -ErrorAction Stop
+    }
 }
 
 if (-not (Test-Admin)) {
