@@ -50,6 +50,16 @@ function Test-Admin {
     )
 }
 
+function Stop-Broker {
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    Get-Process vkeys-broker -ErrorAction SilentlyContinue |
+        Stop-Process -Force -ErrorAction SilentlyContinue
+    Get-Process vkeys -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -eq $Vkeys } |
+        Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+}
+
 function Set-LockedAcl([string]$Path) {
     $isDir = Test-Path -LiteralPath $Path -PathType Container
     if ($isDir) {
@@ -83,7 +93,7 @@ if (-not (Test-Admin)) {
 }
 
 if ($Uninstall) {
-    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    Stop-Broker
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
     Write-Host "removed scheduled task $TaskName"
     if ($RemoveData) {
@@ -99,6 +109,9 @@ if (-not (Test-Path (Join-Path $BinDir "vkeys.exe")) -or
     -not (Test-Path (Join-Path $BinDir "vkeys-broker.exe"))) {
     throw "vkeys.exe / vkeys-broker.exe not found in $BinDir"
 }
+
+# The running wrapper holds vkeys.exe open; stop it before replacing binaries.
+Stop-Broker
 
 New-Item -ItemType Directory -Force $InstallDir | Out-Null
 New-Item -ItemType Directory -Force $DataDir | Out-Null
