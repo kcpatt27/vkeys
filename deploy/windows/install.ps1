@@ -48,7 +48,15 @@ function Test-Admin {
 }
 
 function Set-LockedAcl([string]$Path) {
-    & icacls $Path /inheritance:r /grant:r "*S-1-5-18:(F)" "*S-1-5-32-544:(F)" | Out-Null
+    $isDir = Test-Path -LiteralPath $Path -PathType Container
+    $grant = if ($isDir) { "(OI)(CI)F" } else { "F" }
+    & icacls $Path /inheritance:r /grant:r "*S-1-5-18:$grant" "*S-1-5-32-544:$grant" 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        # A previous run may have left a file owned by another identity.
+        & takeown /f $Path /a 2>&1 | Out-Null
+        & icacls $Path /inheritance:r /grant:r "*S-1-5-18:$grant" "*S-1-5-32-544:$grant" 2>&1 | Out-Null
+    }
+    if ($LASTEXITCODE -ne 0) { throw "cannot set ACL on $Path" }
 }
 
 if (-not (Test-Admin)) {
@@ -77,6 +85,13 @@ New-Item -ItemType Directory -Force $InstallDir | Out-Null
 New-Item -ItemType Directory -Force $DataDir | Out-Null
 Set-LockedAcl $DataDir
 
+# Earlier builds did not mark the directory ACEs inheritable, so a vault.tmp
+# written by another identity could replace vault.bin with an ACL that locks
+# out Administrators. Repair any existing files before reading the vault.
+foreach ($file in @($KeyFile, $Vault, $Profiles, (Join-Path $DataDir "vault.tmp"))) {
+    if (Test-Path -LiteralPath $file) { Set-LockedAcl $file }
+}
+
 Copy-Item (Join-Path $BinDir "vkeys.exe") $Vkeys -Force
 Copy-Item (Join-Path $BinDir "vkeys-broker.exe") $Broker -Force
 
@@ -99,6 +114,9 @@ $env:VKEYS_PROFILES = $Profiles
 $env:VKEYS_SCHEME = "xchacha20poly1305"
 
 $listing = & $Vkeys ls 2>$null
+if ($LASTEXITCODE -ne 0) {
+    throw "cannot read the vault at $Vault; run this installer elevated and check the ACL on $DataDir"
+}
 $hasProvider = ($listing | Where-Object { $_ -match '^openrouter/broker\s' }).Count -gt 0
 $hasToken = ($listing | Where-Object { $_ -match '^broker/token\s' }).Count -gt 0
 
@@ -116,6 +134,7 @@ if (-not $hasProvider) {
     }
     if (-not $provider) { throw "no provider key entered" }
     $provider | & $Vkeys set openrouter/broker --stdin
+    if ($LASTEXITCODE -ne 0) { throw "failed to store the provider key" }
     Remove-Variable provider, secure -ErrorAction SilentlyContinue
     $hasProvider = $true
 }
@@ -125,6 +144,7 @@ if (-not ($hasToken -and (Test-Path $AgentTokenPath))) {
     [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
     $token = -join ($bytes | ForEach-Object { $_.ToString("x2") })
     $token | & $Vkeys set broker/token --stdin
+    if ($LASTEXITCODE -ne 0) { throw "failed to store the broker token" }
     New-Item -ItemType Directory -Force (Split-Path $AgentTokenPath) | Out-Null
     Set-Content -Path $AgentTokenPath -Value $token -NoNewline -Encoding ascii
     & icacls $AgentTokenPath /inheritance:r /grant:r "${AgentUser}:(R)" "*S-1-5-18:(F)" "*S-1-5-32-544:(F)" | Out-Null
