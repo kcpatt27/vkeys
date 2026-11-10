@@ -55,11 +55,9 @@ run it without a human typing the profile name. The crate is published from
 - Windows x64: `x86_64-pc-windows-msvc` on `windows-latest`, runs
   `cargo test --release` before building.
 
-The two x64 jobs package both binaries plus `LICENSE` and `README`, and each
-emits a SHA-256 sidecar (`<archive>.sha256`). The ARM64 Linux and Windows ARM64
-jobs package the binaries only and emit no checksum; the macOS job packages the
-binaries only but does emit a `.sha256` sidecar. Add the licence, readme, and a
-checksum to any archive before shipping it.
+All six jobs package both binaries plus `LICENSE` and `README`, and each emits
+a SHA-256 sidecar (`<archive>.sha256`). The tag-triggered run produces the
+`vkeys-v0.1.0-*` release set; verify every archive before attaching it.
 
 Run it manually, or let a published GitHub release trigger it. Download the
 artifacts and attach them to the release.
