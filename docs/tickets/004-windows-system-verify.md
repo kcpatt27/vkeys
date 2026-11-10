@@ -1,6 +1,6 @@
-# 004 — Windows SYSTEM broker verification
+# 004 - Windows SYSTEM broker verification
 
-Status: open · Priority: P0 · Area: Windows / release
+Status: done · Priority: P0 · Area: Windows / release
 
 ## Context
 `deploy/windows/install.ps1` runs the broker as SYSTEM with an ACLed
@@ -22,13 +22,14 @@ host with port 8787 free.
   replacement, checked `vkeys set` exits, broker stop before binary copy, and
   budget prices.
 
-## Remaining
-- Boot start has not been exercised by a reboot. The task is registered with an
-  AtStartup trigger; confirm after the next reboot.
+## Boot verified 2026-11-10
+After a reboot at 07:30:12, the task chain started at 07:30:26 (`cmd.exe`), then
+`vkeys.exe` and `vkeys-broker.exe` at 07:30:33. `/healthz` returned 200 and the
+agent boundary still held. No open items.
 
 ## Acceptance
 - [x] Elevated install succeeds.
-- [ ] Task runs at boot.
+- [x] Task runs at boot. Boot evidence: 14 to 21 seconds after boot.
 - [x] `/healthz` returns 200; token at `%APPDATA%\vkeys\broker.token`.
 - [x] `icacls` shows SYSTEM + Administrators only; the agent user cannot read
       the master key or vault.

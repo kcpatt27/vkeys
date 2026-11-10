@@ -81,7 +81,9 @@ trust upgrade, not a build requirement.
 gh repo edit kcpatt27/vkeys --visibility public --accept-visibility-change-consequences
 ```
 
-Then create a GitHub release from the tag.
+Then create a GitHub release from the tag. Use `docs/RELEASE-0.1.0.md` as the
+release body, and attach the verified artifacts produced by the published-release
+run.
 
 ## Rollback
 

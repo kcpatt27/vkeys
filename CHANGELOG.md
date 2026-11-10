@@ -9,4 +9,5 @@
   budget, per-request audit, non-streaming.
 - Rust-only; Apache-2.0; CI matrix configured for Windows, macOS, and Linux
   (manual while private; ticket 015 re-enables push runs after the flip).
+- Release notes: `docs/RELEASE-0.1.0.md`.
 - Python oracle archived at tag `python-oracle-final`.
