@@ -14,10 +14,15 @@ green for all six jobs, and the x64 archives were downloaded and checked:
 both contain `vkeys`, `vkeys-broker`, `LICENSE`, and `README`, and each has a
 matching SHA-256 sidecar.
 
-What is still missing: that run predates the three broker fixes now on `main`
-(`f384656`, `d0a51fa`, `e73b16f`), so the published x64 binaries do not
-contain the current broker code, and no GitHub release exists to attach
-artifacts to.
+That run predated the broker fixes now on `main`; the 2026-11-10 run below
+supersedes it. The only open item is attaching the tag-built artifacts to the
+GitHub release.
+
+## Verified 2026-11-10
+`release-artifacts` run `42818528496` at `b145d63` is green for all six jobs.
+Every archive was downloaded and checked: both binaries, LICENSE, README, and a
+matching SHA-256. This is the release-candidate build; the tag-triggered run
+will produce the `vkeys-v0.1.0-*` release set.
 
 ## Acceptance
 - [x] Add `x86_64-unknown-linux-musl` and `x86_64-pc-windows-msvc` jobs.
@@ -26,5 +31,5 @@ artifacts to.
       include LICENSE + README and a SHA-256 sidecar; macOS includes LICENSE and
       README alongside its existing checksum.
 - [ ] Attach to the release.
-- [ ] Rebuild the x64 jobs at the release commit so the artifacts carry the
-      current broker code.
+- [x] Rebuild at the release-candidate commit so the artifacts carry the current
+      broker code. Run `42818528496` at `b145d63`, all six archives verified.
