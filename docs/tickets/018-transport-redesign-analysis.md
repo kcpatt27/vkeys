@@ -5,11 +5,23 @@ Do not write code until the use case and threat model are settled.
 
 ## Why
 
-`feat/transport-age-bundle` implements a privileged, age-encrypted vault
-export/import: `vkeys transport export` and `import`, service-user only, hidden
-passphrase, atomic writes, 48 `#[test]` functions. It is real work and it is
-**not in 0.1** - the release prompt says "do not merge any `feat/transport-*`
-branch; 0.1 ships without transport."
+`feat/transport-age-bundle` implements an age-encrypted vault export/import:
+`vkeys transport export` and `import`, hidden passphrase, atomic writes, 48
+`#[test]` functions (47 pass on Windows). It is in human-vault scope: it does not
+enforce the service user and is not an agent boundary. It is **not in 0.1** - the
+release prompt says "do not merge any `feat/transport-*` branch; 0.1 ships
+without transport."
+
+## Audit 2026-11-10
+The branch has good negative tests and atomic writes, but the TTY gate is
+bypassable by a same-user PTY or ConPTY, so it is not an agent boundary. There is
+no ADR, no public-key recipient, no target binding, no replay or stale-bundle
+protection, and no actor/host/hash audit. The old agent-callable push exists only
+as uncommitted lines in the dirty `wip/transport-push` worktree.
+
+Recommendation: choose **B** (drop transport and rely on the installers plus
+010) unless an offline named-key handoff is a real requirement, in which case
+choose **C**. Do not attempt **A** in 0.2. The decision is still open.
 
 The concern is not whether the code works. It is whether the shape is right.
 "Move a vault" and "seed one provider key into a new service user" are different
@@ -53,7 +65,8 @@ run therefore executes 47 and a Linux or macOS run executes 46.
 ## Options to compare (at least)
 
 - **A. Keep the current age bundle.** Whole-vault or named-key export, service
-  user only, no agent path. Document the exact use case it serves.
+  user only, no agent path. The 2026-11-10 audit says the branch does not meet
+  this; treat A as a rewrite, not a merge.
 - **B. Drop transport; keep installer/import.** For bootstrap, the provider-key
   prompt or `VKEYS_PROVIDER_KEY_FILE` is enough. For migration, use the service
   user plus a controlled file copy.
