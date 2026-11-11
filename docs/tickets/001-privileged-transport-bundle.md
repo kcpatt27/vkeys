@@ -1,6 +1,6 @@
 # 001 - Privileged transport bundle
 
-Status: open · Priority: P1 · Area: security / transport
+Status: deferred · Priority: P1 · Area: security / transport
 
 ## Context
 The uncommitted `transport push` is agent-callable: the source vault is DPAPI
@@ -16,6 +16,11 @@ and read the bundle. Do not merge it as this ticket.
 Missing: service-user enforcement, public-key recipient, target binding,
 replay/stale-bundle protection, actor/host/hash audit, `--replace` confirmation
 or backup, a successful CLI test, and a non-Windows vault test.
+
+## Decision 2026-11-11
+ADR-0005 defers this ticket. 0.2 ships without transport; target identity (D) is
+the later direction. The age branch does not satisfy this ticket and must not be
+merged as-is.
 
 ## Acceptance
 - [ ] `vkeys transport export` runs only as the service user (Linux `vkeys` /

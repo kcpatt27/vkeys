@@ -48,8 +48,8 @@ but there is no `get`, `print`, or `export-env`.
 
 ## Not in 0.1
 
-- Transport push/receive. It is deferred to 0.2; ticket 018 is analysis-first,
-  and ticket 001 is the privileged design.
+- Transport push/receive. It is not in 0.1 or 0.2. ADR-0005 records the
+  decision; target-identity transport (D) may be revisited later.
 - Broker lifecycle tray, per-client budgets, portable vault export/import, vault
   locking, and macOS notarization.
 

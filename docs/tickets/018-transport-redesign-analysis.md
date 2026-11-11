@@ -1,7 +1,8 @@
 # 018 - transport-to: structured analysis before a redo
 
-Status: **open - analysis only**. Priority: P1 (security), not a 0.1 blocker.
-Do not write code until the use case and threat model are settled.
+Status: **done - decision B (2026-11-11)**. Priority: P1 (security), not a 0.1
+blocker. ADR-0005: no transport in 0.1 or 0.2; target identity (D) may be
+revisited later.
 
 ## Why
 
@@ -19,9 +20,10 @@ no ADR, no public-key recipient, no target binding, no replay or stale-bundle
 protection, and no actor/host/hash audit. The old agent-callable push exists only
 as uncommitted lines in the dirty `wip/transport-push` worktree.
 
-Recommendation: choose **B** (drop transport and rely on the installers plus
-010) unless an offline named-key handoff is a real requirement, in which case
-choose **C**. Do not attempt **A** in 0.2. The decision is still open.
+Decision 2026-11-11: **B**. ADR-0005 records it. Drop transport for 0.2; the
+installers cover bootstrap and 010 covers portable vault/migration. D is the
+later direction if target binding and replay protection become real
+requirements. Do not merge the age branch as 001.
 
 The concern is not whether the code works. It is whether the shape is right.
 "Move a vault" and "seed one provider key into a new service user" are different

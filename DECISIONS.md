@@ -108,3 +108,37 @@ fixed-argv processes.
 - Storing the header as a vault value - binary payload, and still unretrievable.
 - Recording only the password - loses the PIM / keyfile / cipher state that can
   make a volume permanently unmountable.
+
+## ADR-0005 - Transport is dropped for now; target identity is the later direction
+
+**Status:** accepted (2026-11-11).
+
+**Context.** The unmerged `feat/transport-age-bundle` branch implements an age +
+scrypt vault export/import in human-vault scope. The 2026-11-10 audit found that
+it does not enforce the service user, the TTY gate is bypassable by a same-user
+PTY or ConPTY, and it lacks target binding, replay protection, replace
+confirmation, and actor/host/hash audit. Ticket 001 is therefore not satisfied.
+Ticket 018 asked for a decision before any redo.
+
+**Decision.**
+
+1. **0.2 ships without transport.** Choose option B: bootstrap uses the Raven and
+   Windows installers; migration uses a controlled file copy or the portable
+   vault work in 010.
+2. **Do not merge `feat/transport-age-bundle` as 001.** Its reusable parts
+   (atomic write, size cap, path checks, negative tests) can seed a later design.
+3. **Target identity (option D) is the later direction.** Revisit it only if
+   target binding and replay protection become real requirements. D means an age
+   recipient public key, a signed manifest, and a one-time import token.
+4. **Do not claim transport exists, that 001 is satisfied, or that the TTY gate
+   is an agent boundary.** 001 is deferred; 018 is closed by this ADR.
+5. **Preserve the old work.** `feat/transport-age-bundle` and the dirty
+   `wip/transport-push` worktree stay unmerged. Do not delete either without a
+   separate decision.
+
+**Consequences.** 0.2 has less surface area. Offline transfer remains manual
+until D. The installers already cover the bootstrap case. The ticket queue shows
+001 as deferred and 018 as done.
+
+**Rejected.** A as-is (does not meet 001 and the boundary claim would be false);
+C now (no named-key offline need established); D now (too much for 0.2).
