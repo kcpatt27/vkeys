@@ -9,7 +9,7 @@ Committed local ticket queue (no external tracker yet). One file per ticket.
 | 003 | Raven broker go-live + boundary check | P0 | done |
 | 004 | Windows SYSTEM broker verification | P0 | done |
 | 005 | Release v0.1 | P0 | open |
-| 006 | x64 release artifacts | P0 | open |
+| 006 | x64 release artifacts | P0 | done |
 | 007 | Verify ARM/macOS artifacts | P1 | open |
 | 008 | Claims + vault note update | P0 | done |
 | 009 | Broker hardening | P1 | done |
