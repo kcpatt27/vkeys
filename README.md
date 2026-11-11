@@ -68,9 +68,8 @@ all; it gets a use-only broker token. See [`deploy/raven/`](deploy/raven/) and
 [`deploy/windows/`](deploy/windows/).
 
 The Linux path is verified on Raven (ticket 003). The Windows SYSTEM path is
-verified on a live Windows host for install, health, ACL, and broker use; the
-startup task is registered, but boot start has not been exercised by a reboot
-(ticket 004).
+verified on a live Windows host for install, boot start, health, ACL, and broker
+use (ticket 004).
 
 ## Store
 
@@ -90,6 +89,10 @@ startup task is registered, but boot start has not been exercised by a reboot
 - **Headless Linux / Pi:** no Secret Service? The master key falls back to
   `~/.config/vkeys/master.key` (0600). Set `VKEYS_MASTER_KEY_FILE` to pin it.
   See [`docs/PI.md`](docs/PI.md).
+- **Service vaults:** set `VKEYS_MASTER_KEY_FILE` to the key that encrypted the
+  vault, every time. If the vault exists and that file is missing, vkeys refuses
+  to create a new key. The vault stores a key fingerprint, and a wrong key fails
+  before any write. See [`docs/RECOVERY.md`](docs/RECOVERY.md).
 
 ## Tier 2
 

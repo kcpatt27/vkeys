@@ -1,8 +1,7 @@
 # Windows - hardened broker
 
-Status: verified on a live Windows host for elevated install, health, ACL, and
-broker use. The startup task is registered; boot start has not been exercised by
-a reboot (ticket 004).
+Status: verified on a live Windows host for elevated install, boot start, health,
+ACL, and broker use (ticket 004).
 
 Installs the Tier 2 broker as **SYSTEM** via a startup scheduled task. The vault,
 master key, and profiles live in `C:\ProgramData\vkeys-broker`, ACLed to

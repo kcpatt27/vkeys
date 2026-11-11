@@ -28,6 +28,24 @@ non-interactive run, put the provider key in a root-only file and set
 `VKEYS_PROVIDER_KEY_FILE`; the broker token is still generated. Re-running is
 idempotent; an existing provider key and token are left alone.
 
+## Manual commands
+
+Manual `set`, `rotate`, or `import-env` must use the service environment. Do not
+run them as the `vkeys` user without `VKEYS_MASTER_KEY_FILE`: that is how the
+2026-11-11 mixed-key vault was created.
+
+```bash
+sudo -u vkeys env \
+  VKEYS_VAULT=/var/lib/vkeys/vault.bin \
+  VKEYS_MASTER_KEY_FILE=/etc/vkeys/master.key \
+  VKEYS_PROFILES=/etc/vkeys/profiles.toml \
+  VKEYS_SCHEME=xchacha20poly1305 \
+  /usr/local/bin/vkeys rotate broker/token --stdin
+```
+
+The CLI now refuses to create a key when the vault exists and names the expected
+path. See [`../../docs/RECOVERY.md`](../../docs/RECOVERY.md).
+
 ## Verify the boundary
 
 ```bash

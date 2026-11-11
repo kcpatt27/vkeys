@@ -18,25 +18,40 @@ fn forced_xchacha() -> bool {
     )
 }
 
-pub fn protect(plain: &[u8]) -> Result<(&'static str, Vec<u8>), String> {
+/// True when the selected write scheme needs the master key.
+pub fn uses_master_key() -> bool {
+    forced_xchacha() || !cfg!(windows)
+}
+
+pub fn protect(
+    plain: &[u8],
+    existing_vault: bool,
+) -> Result<(&'static str, Vec<u8>, Option<String>), String> {
     // Windows defaults to DPAPI for compatibility; VKEYS_SCHEME=xchacha forces
     // the portable key-file scheme (used by the Windows service-account deploy).
     if forced_xchacha() {
-        let key = crate::secret::master_key()?;
-        return Ok((XCHACHA, seal_with_key(&key, plain)?));
+        let key = crate::secret::master_key(existing_vault)?;
+        let id = key.id();
+        return Ok((XCHACHA, seal_with_key(key.bytes(), plain)?, Some(id)));
     }
     #[cfg(windows)]
     {
-        return Ok((DPAPI, crate::dpapi::protect(plain)?));
+        return Ok((DPAPI, crate::dpapi::protect(plain)?, None));
     }
     #[cfg(not(windows))]
     {
-        let key = crate::secret::master_key()?;
-        Ok((XCHACHA, seal_with_key(&key, plain)?))
+        let key = crate::secret::master_key(existing_vault)?;
+        let id = key.id();
+        Ok((XCHACHA, seal_with_key(key.bytes(), plain)?, Some(id)))
     }
 }
 
-pub fn unprotect(scheme: &str, blob: &[u8]) -> Result<Vec<u8>, String> {
+pub fn unprotect(
+    scheme: &str,
+    blob: &[u8],
+    existing_vault: bool,
+    expected_key_id: Option<&str>,
+) -> Result<Vec<u8>, String> {
     match scheme {
         DPAPI => {
             #[cfg(windows)]
@@ -49,8 +64,14 @@ pub fn unprotect(scheme: &str, blob: &[u8]) -> Result<Vec<u8>, String> {
             }
         }
         XCHACHA => {
-            let key = crate::secret::master_key()?;
-            open_with_key(&key, blob)
+            let key = crate::secret::master_key(existing_vault)?;
+            if let Some(expected) = expected_key_id {
+                if key.id() != expected {
+                    return Err(crate::secret::key_mismatch(Some(expected), &key.id()));
+                }
+            }
+            open_with_key(key.bytes(), blob)
+                .map_err(|_| crate::secret::key_mismatch(expected_key_id, &key.id()))
         }
         other => Err(format!("unknown vault scheme: {other}")),
     }

@@ -13,6 +13,10 @@ use crate::crypto;
 #[derive(Serialize, Deserialize)]
 struct VaultFile {
     version: u32,
+    /// Non-secret fingerprint of the master key, added on the next successful
+    /// write. Old vaults do not have it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    key_id: Option<String>,
     entries: IndexMap<String, Entry>,
 }
 
@@ -33,20 +37,23 @@ pub struct Entry {
 pub struct Vault {
     pub path: PathBuf,
     data: VaultFile,
+    exists: bool,
 }
 
 impl Vault {
     pub fn open(path: impl Into<PathBuf>) -> Result<Self, String> {
         let path = path.into();
+        let exists = path.exists();
         let mut data = VaultFile {
             version: 1,
+            key_id: None,
             entries: IndexMap::new(),
         };
-        if path.exists() {
+        if exists {
             let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
             data = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
         }
-        Ok(Self { path, data })
+        Ok(Self { path, data, exists })
     }
 
     /// Python's `path.with_suffix(".tmp")`: replace the last suffix, else append.
@@ -96,8 +103,56 @@ impl Vault {
         self.data.entries.get(name)
     }
 
+    /// Verify the resolved key against the vault before any mutation.
+    ///
+    /// A missing key is an error when the vault exists. A wrong key is detected
+    /// by the stored fingerprint, or by decrypting one existing XChaCha entry
+    /// on a vault written before fingerprints were added.
+    pub fn validate_key(&self) -> Result<(), String> {
+        let has_xchacha = self
+            .data
+            .entries
+            .values()
+            .any(|e| e.scheme.as_deref() == Some(crypto::XCHACHA));
+        if !crypto::uses_master_key() && !has_xchacha {
+            return Ok(());
+        }
+
+        let key = crate::secret::master_key(self.exists)?;
+        if let Some(expected) = &self.data.key_id {
+            if key.id() != *expected {
+                return Err(crate::secret::key_mismatch(Some(expected), &key.id()));
+            }
+            return Ok(());
+        }
+
+        if let Some((name, entry)) = self
+            .data
+            .entries
+            .iter()
+            .find(|(_, e)| e.scheme.as_deref() == Some(crypto::XCHACHA))
+        {
+            let blob = base64::engine::general_purpose::STANDARD
+                .decode(entry.ct.as_bytes())
+                .map_err(|e| format!("{name}: invalid ciphertext: {e}"))?;
+            if crypto::open_with_key(key.bytes(), &blob).is_err() {
+                return Err(crate::secret::key_mismatch(None, &key.id()));
+            }
+        }
+        Ok(())
+    }
+
     pub fn set(&mut self, name: &str, value: &str) -> Result<(), String> {
-        let (scheme, blob) = crypto::protect(value.as_bytes())?;
+        self.validate_key()?;
+        let (scheme, blob, key_id) = crypto::protect(value.as_bytes(), self.exists)?;
+        if let Some(id) = key_id {
+            if let Some(expected) = &self.data.key_id {
+                if expected != &id {
+                    return Err(crate::secret::key_mismatch(Some(expected), &id));
+                }
+            }
+            self.data.key_id = Some(id);
+        }
         self.data.entries.insert(
             name.to_string(),
             Entry {
@@ -122,7 +177,8 @@ impl Vault {
             .decode(entry.ct.as_bytes())
             .map_err(|e| format!("{name}: invalid ciphertext: {e}"))?;
         let scheme = entry.scheme.as_deref().unwrap_or(crypto::DPAPI);
-        let plain = crypto::unprotect(scheme, &blob)?;
+        let plain = crypto::unprotect(scheme, &blob, self.exists, self.data.key_id.as_deref())
+            .map_err(|e| format!("{}: {e}", self.path.display()))?;
         String::from_utf8(plain).map_err(|e| format!("{name}: invalid utf-8: {e}"))
     }
 

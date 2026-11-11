@@ -226,6 +226,9 @@ fn cmd_init(vault_path: &Path, profiles_path: &Path) -> i32 {
         Ok(v) => v,
         Err(code) => return code,
     };
+    if let Err(e) = vault.validate_key() {
+        return fail(&e);
+    }
     if !vault_path.exists() {
         if let Err(e) = vault.save() {
             return fail(&e);
@@ -244,6 +247,9 @@ fn cmd_set(vault_path: &Path, name: &str, clipboard: bool, stdin: bool, yes: boo
         Ok(v) => v,
         Err(code) => return code,
     };
+    if let Err(e) = vault.validate_key() {
+        return fail(&e);
+    }
     if vault.names().iter().any(|n| n == name) {
         match confirm_overwrite(name, yes) {
             Ok(true) => {}
@@ -427,6 +433,9 @@ fn cmd_rotate(vault_path: &Path, name: &str, clipboard: bool, stdin: bool) -> i3
         Ok(v) => v,
         Err(code) => return code,
     };
+    if let Err(e) = vault.validate_key() {
+        return fail(&e);
+    }
     if vault.names().iter().any(|n| n == name) {
         emit_out(&format!(
             "rotating {name}; the old value is unrecoverable\n"
@@ -484,6 +493,9 @@ fn cmd_import_env(vault_path: &Path, path: &str, names: &str) -> i32 {
         Ok(v) => v,
         Err(code) => return code,
     };
+    if let Err(e) = vault.validate_key() {
+        return fail(&e);
+    }
     for name in wanted {
         match parsed.iter().find(|(k, _)| k == &name) {
             None => emit_err(&format!("skip {name}: not in {path}\n")),
@@ -525,6 +537,28 @@ fn cmd_audit(vault_path: &Path, tail: i64) -> i32 {
     0
 }
 
+struct EnvGuard {
+    key: &'static str,
+    old: Option<String>,
+}
+
+impl EnvGuard {
+    fn set(key: &'static str, value: &str) -> Self {
+        let old = std::env::var(key).ok();
+        std::env::set_var(key, value);
+        Self { key, old }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        match &self.old {
+            Some(value) => std::env::set_var(self.key, value),
+            None => std::env::remove_var(self.key),
+        }
+    }
+}
+
 fn cmd_selfcheck() -> i32 {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -538,7 +572,7 @@ fn cmd_selfcheck() -> i32 {
         let secret = "s3cret-value-123";
         vault.set("k", secret)?;
         if vault.get("k")? != secret {
-            return Err("dpapi roundtrip mismatch".to_string());
+            return Err("roundtrip mismatch".to_string());
         }
         let raw = fs::read(&vault_path).map_err(|e| e.to_string())?;
         if raw.windows(secret.len()).any(|w| w == secret.as_bytes()) {
@@ -568,12 +602,40 @@ fn cmd_selfcheck() -> i32 {
         if profile.keys != vec![("K".to_string(), "k".to_string())] || !profile.agent_ok {
             return Err("profile parse mismatch".to_string());
         }
+
+        // Key-file scheme and explicit key/vault mismatch detection.
+        let key_path = dir.join("master.key");
+        let key_text = key_path
+            .to_str()
+            .ok_or_else(|| "temporary key path is not UTF-8".to_string())?;
+        let _key_env = EnvGuard::set("VKEYS_MASTER_KEY_FILE", key_text);
+        let _scheme_env = EnvGuard::set("VKEYS_SCHEME", "xchacha20poly1305");
+        let key_vault_path = dir.join("key-vault.bin");
+        let mut key_vault = Vault::open(&key_vault_path)?;
+        key_vault.set("k", secret)?;
+        if key_vault.get("k")? != secret {
+            return Err("key-file roundtrip mismatch".to_string());
+        }
+        let text = fs::read_to_string(&key_vault_path).map_err(|e| e.to_string())?;
+        let mut json: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+        json["key_id"] = serde_json::Value::String("00000000000000000000000000000000".into());
+        fs::write(
+            &key_vault_path,
+            serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        let key_vault = Vault::open(&key_vault_path)?;
+        match key_vault.get("k") {
+            Err(e) if e.contains("key mismatch") => {}
+            Err(e) => return Err(format!("key mismatch check: {e}")),
+            Ok(_) => return Err("key mismatch not detected".to_string()),
+        }
         Ok(())
     })();
     let _ = fs::remove_dir_all(&dir);
     match result {
         Ok(()) => {
-            emit_out("selfcheck ok: crypto roundtrip, no plaintext, scrub, profile parse\n");
+            emit_out("selfcheck ok: crypto roundtrip, no plaintext, scrub, profile parse, key mismatch detection\n");
             0
         }
         Err(e) => fail(&e),

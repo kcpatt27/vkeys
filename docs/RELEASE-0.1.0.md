@@ -29,7 +29,10 @@ but there is no `get`, `print`, or `export-env`.
 - Release archives: Linux ARM64 gnu and musl, macOS universal, Windows ARM64,
   Linux x64 musl, and Windows x64 msvc. Each archive contains both binaries,
   `LICENSE`, and `README`; each has a matching `.sha256` sidecar.
-- `cargo test --release`: 3 unit, 19 broker, and 3 CLI tests pass.
+- `cargo test --release`: 3 unit, 19 broker, 3 CLI, and 5 key-selection tests
+  pass.
+- Master-key selection: an existing vault never gets a new key. The vault stores
+  a non-secret key fingerprint; a wrong key fails before any write.
 - `cargo publish --dry-run` is clean; the `vkeys` crate name is available.
 
 ## Boundaries

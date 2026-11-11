@@ -41,6 +41,34 @@ VKEYS_BROKER_TOKEN = "broker/token"
 `openrouter/broker` and `broker/token` are dedicated names. Do not reuse the
 Meridian or eyewright provider keys for the broker.
 
+## Service vault
+
+A service vault must be opened with the same master key that encrypted it. The
+systemd unit sets:
+
+```ini
+[Service]
+Environment=VKEYS_VAULT=/var/lib/vkeys/vault.bin
+Environment=VKEYS_MASTER_KEY_FILE=/etc/vkeys/master.key
+Environment=VKEYS_PROFILES=/etc/vkeys/profiles.toml
+```
+
+Manual `set`, `rotate`, or `import-env` against the service vault must use the
+same environment:
+
+```bash
+sudo -u vkeys env \
+  VKEYS_VAULT=/var/lib/vkeys/vault.bin \
+  VKEYS_MASTER_KEY_FILE=/etc/vkeys/master.key \
+  VKEYS_PROFILES=/etc/vkeys/profiles.toml \
+  VKEYS_SCHEME=xchacha20poly1305 \
+  /usr/local/bin/vkeys rotate broker/token --stdin
+```
+
+If the vault exists and the resolved key file is missing, vkeys refuses to
+create a new key. A wrong key is detected by the key fingerprint stored in the
+vault and fails before any mutation. See [`RECOVERY.md`](RECOVERY.md).
+
 ## Client
 
 Point an OpenAI-compatible client at:
