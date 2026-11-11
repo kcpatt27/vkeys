@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 — unreleased
+## 0.1.0 - 2026-11-12
 
 - **Tier 1**: encrypted vault (Windows DPAPI; macOS Keychain / Linux Secret
   Service with XChaCha20-Poly1305), named profiles with fixed argv, no `get`,

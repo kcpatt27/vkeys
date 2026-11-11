@@ -3,6 +3,9 @@
 vkeys is kept **private** until release day. Order: registry first, host
 visibility last.
 
+Planned release: Thursday, 2026-11-12. The tag and draft release are prepared on
+2026-11-11; publish the crate and flip public on release day.
+
 ## Pre-flight
 
 ```powershell

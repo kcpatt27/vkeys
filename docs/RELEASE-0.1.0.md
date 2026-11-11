@@ -1,6 +1,6 @@
 # vkeys 0.1.0
 
-Target date: 2026-11-10. Set the final date when the crate is live.
+Release date: Thursday, 2026-11-12.
 
 License: Apache-2.0.
 
