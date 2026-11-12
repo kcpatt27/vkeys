@@ -86,7 +86,7 @@ use (ticket 004).
   Secret Service. Metadata is plaintext. On Windows,
   `VKEYS_SCHEME=xchacha20poly1305` selects the portable key-file scheme; the
   Windows service install uses it.
-- **Headless Linux / Pi:** no Secret Service? The master key falls back to
+- **Headless Linux:** no Secret Service? The master key falls back to
   `~/.config/vkeys/master.key` (0600). Set `VKEYS_MASTER_KEY_FILE` to pin it.
   See [`docs/PI.md`](docs/PI.md).
 - **Service vaults:** set `VKEYS_MASTER_KEY_FILE` to the key that encrypted the
