@@ -1,8 +1,11 @@
 name: ci
 
-# Manual while the repo is private. Re-enable push/pull_request after the public
-# flip (see RELEASING.md).
+# Runs on push and pull request. release-artifacts.yml stays manual or
+# release-triggered because those runners are billed by the minute.
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 jobs:
