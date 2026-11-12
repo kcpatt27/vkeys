@@ -6,16 +6,17 @@ Status: open · Priority: P0 · Area: release
 Private repo, crate dry-run clean, `vkeys` name free, CI manual.
 
 ## Prepared 2026-11-11
-- Tag `v0.1.0` at `e17ad77`, pushed to `origin` and `github`.
-- `release-artifacts` run `43219605999` at `e17ad77`: all six jobs green.
+- Tag `v0.1.0` at `c5e2cf6`, pushed to `origin` and `github`.
+- `release-artifacts` run `43222069825` at `c5e2cf6`: all six jobs green.
 - Six tag-named archives downloaded and checked: both binaries, LICENSE, README,
   and matching SHA-256.
 - Draft GitHub release created with the 12 assets; the assets were replaced after
   the final tag build.
 - Release notes: `docs/RELEASE-0.1.0.md`. The tag was moved before publication
   from `47eff7e` to `1dc8afb` for the transport correction, then to `62e93ac` for
-  the master-key selection fix and to `e17ad77` for the README test-count
-  correction. The repo was private and the draft had no consumers.
+  the master-key selection fix, to `e17ad77` for the README test-count
+  correction, and to `c5e2cf6` for the headless-Linux wording. The repo was
+  private and the draft had no consumers.
 - Master-key selection: an existing vault refuses a missing key, stores a
   non-secret fingerprint, and fails on a wrong key before any write.
 

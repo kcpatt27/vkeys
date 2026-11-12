@@ -24,7 +24,7 @@ matching SHA-256. This is the release-candidate build; the tag-triggered run
 will produce the `vkeys-v0.1.0-*` release set.
 
 ## Attached 2026-11-11
-- Tag `v0.1.0` at `e17ad77`; run `43219605999` is green for all six jobs.
+- Tag `v0.1.0` at `c5e2cf6`; run `43222069825` is green for all six jobs.
 - Six tag-named archives plus six SHA-256 files are attached to the draft
   GitHub release. Publish the release on 2026-11-12 as part of 005.
 
