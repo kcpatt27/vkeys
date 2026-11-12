@@ -178,7 +178,7 @@ Binding is only half the control. Also:
   audit line as `overage_usd` but is not charged to the in-memory ledger
 - one provider (OpenRouter) and one upstream
 - no streaming; a client that sends `"stream": true` gets 400
-- per-client tokens and per-client budgets are deferred to ticket 011
+- per-client tokens and per-client budgets are deferred
 - no persistent request queue, retries, or model allowlist yet
 
 ## Tests

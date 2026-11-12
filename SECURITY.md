@@ -25,8 +25,7 @@ or a bypass.
   SYSTEM and ACL `C:\ProgramData\vkeys-broker` to SYSTEM + Administrators; the
   agent gets only a use-only token. It sets `VKEYS_SCHEME=xchacha20poly1305` so
   the SYSTEM task can read a key file the agent cannot. This path is verified on
-  a live Windows host for install, boot start, health, ACL, and broker use
-  (ticket 004).
+  a live Windows host for install, boot start, health, ACL, and broker use.
 - vkeys makes accidental exposure hard, not impossible: no `get`, profiles with
   fixed `argv`, a clean child environment, output scrubbing, and an audit log.
   It is not a sandbox.
@@ -47,4 +46,4 @@ or a bypass.
 - The Rust dependency set is locked in `rust/Cargo.lock`.
 - CI is configured to build and test on Windows, macOS, and Linux
   (`.github/workflows/ci.yml`). It is manual-only while the repository is
-  private; ticket 015 re-enables push/pull_request runs after the public flip.
+  private; push and pull-request runs are re-enabled after the public flip.

@@ -117,8 +117,9 @@ fixed-argv processes.
 scrypt vault export/import in human-vault scope. The 2026-11-10 audit found that
 it does not enforce the service user, the TTY gate is bypassable by a same-user
 PTY or ConPTY, and it lacks target binding, replay protection, replace
-confirmation, and actor/host/hash audit. Ticket 001 is therefore not satisfied.
-Ticket 018 asked for a decision before any redo.
+confirmation, and actor/host/hash audit. The privileged transport ticket is
+therefore not satisfied. The transport analysis asked for a decision before any
+redo.
 
 **Decision.**
 

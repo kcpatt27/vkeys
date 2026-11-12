@@ -84,7 +84,7 @@ The hardened install is live on Raven:
 
 The earlier Raven start failed because the profile set a `$5` budget without
 `--price-in`/`--price-out`; the broker rejects a positive budget with both
-prices zero. The prices above are the live fix. Ticket 003 records the
+prices zero. The prices above are the live fix; the deployment docs record the
 acceptance check.
 
 ## Security boundary

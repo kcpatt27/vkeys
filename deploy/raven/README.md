@@ -79,5 +79,5 @@ never sees the key."
   provider key.
 - Keep the broker on loopback or the tailnet; never expose `:8787` publicly.
 - The service restarts on failure; the audit log is `/var/lib/vkeys/audit.jsonl`.
-- Windows equivalent (`deploy/windows/`) is implemented but has not been
-  verified on a live host yet; see ticket 004.
+- Windows equivalent (`deploy/windows/`) is verified on a live Windows host,
+  including boot start.

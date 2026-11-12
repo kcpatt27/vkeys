@@ -10,6 +10,6 @@
 - **Master-key selection**: an existing vault never gets a new key. The vault
   stores a key fingerprint; a wrong key fails before any write.
 - Rust-only; Apache-2.0; CI matrix configured for Windows, macOS, and Linux
-  (manual while private; ticket 015 re-enables push runs after the flip).
+  (manual while private; push runs are re-enabled after the public flip).
 - Release notes: `docs/RELEASE-0.1.0.md`.
 - Python oracle archived at tag `python-oracle-final`.

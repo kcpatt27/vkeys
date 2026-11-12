@@ -67,9 +67,8 @@ key readable only by that user. The agent's user then cannot decrypt the vault a
 all; it gets a use-only broker token. See [`deploy/raven/`](deploy/raven/) and
 [`deploy/windows/`](deploy/windows/).
 
-The Linux path is verified on Raven (ticket 003). The Windows SYSTEM path is
-verified on a live Windows host for install, boot start, health, ACL, and broker
-use (ticket 004).
+The Linux path is verified on Raven. The Windows SYSTEM path is verified on a
+live Windows host for install, boot start, health, ACL, and broker use.
 
 ## Store
 
@@ -126,7 +125,7 @@ cd rust
 cargo test --release        # 3 unit + 19 broker + 3 CLI + 5 key-selection
 ```
 
-CI is manual-only while the repo is private (ticket 015).
+CI is manual-only while the repo is private.
 
 See `PORT.md` (historical) for the Python parity record.
 
