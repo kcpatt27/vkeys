@@ -123,7 +123,7 @@ The Python oracle is archived at tag `python-oracle-final`; `PORT.md` is its rec
 
 ```powershell
 cd rust
-cargo test --release        # 3 CLI + 19 broker + 3 unit tests
+cargo test --release        # 3 unit + 19 broker + 3 CLI + 5 key-selection
 ```
 
 CI is manual-only while the repo is private (ticket 015).
