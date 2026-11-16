@@ -22,6 +22,8 @@ use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 pub const DEFAULT_UPSTREAM: &str = "https://openrouter.ai/api/v1";
 pub const MAX_BODY: usize = 10_000_000;
 pub const TIMEOUT_SECS: u64 = 120;
+/// A dead upstream should cost seconds, not the whole request budget.
+pub const CONNECT_TIMEOUT_SECS: u64 = 3;
 
 const DEFAULT_RATE_LIMIT: u32 = 60;
 const DEFAULT_RATE_WINDOW_SECS: u64 = 60;
@@ -364,6 +366,7 @@ fn handle(request: Request, config: &Config, state: &State) {
 }
 
 fn post_chat(mut request: Request, config: &Config, state: &State) {
+    let started = Instant::now();
     // Both buckets must allow: an unauthenticated flood is capped per peer IP,
     // and real clients are additionally capped per presented token.
     let allowed = state.allow(ip_key(&request), config.rate_limit, config.rate_window_secs)
@@ -477,6 +480,7 @@ fn post_chat(mut request: Request, config: &Config, state: &State) {
 
     let upstream = format!("{}/chat/completions", config.upstream.trim_end_matches('/'));
     let agent = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(CONNECT_TIMEOUT_SECS))
         .timeout(Duration::from_secs(TIMEOUT_SECS))
         .build();
     let result = agent
@@ -525,6 +529,9 @@ fn post_chat(mut request: Request, config: &Config, state: &State) {
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
         "cost_usd": round(cost, 8),
+        "elapsed_ms": started.elapsed().as_millis() as u64,
+        // One upstream attempt by construction: no retry loop, fresh agent.
+        "attempts": 1,
     });
     if overage > 0.0 {
         event["overage_usd"] = json!(round(overage, 8));
@@ -873,8 +880,35 @@ mod tests {
         assert_eq!(event["status"], 200);
         assert_eq!(event["prompt_tokens"], 100);
         assert_eq!(event["completion_tokens"], 50);
+        assert_eq!(event["attempts"], 1);
+        assert!(event["elapsed_ms"].as_u64().is_some());
         assert!(!text.contains("provider-secret"));
         assert!(!text.contains("hello"));
+    }
+
+    #[test]
+    fn dead_upstream_is_cut_at_connect_timeout() {
+        // TEST-NET-1 is reserved and never answers, so the TCP connect stalls
+        // until the connect timeout fires. Without it ureq waits 30 s.
+        let dir = temp_dir("connect-timeout");
+        let audit = dir.join("audit.jsonl");
+        let mut config = config_for(0, audit.clone(), 5.0, 0.0, 0.0);
+        config.upstream = "http://192.0.2.1:81/v1".to_string();
+        let (port, _) = start(config);
+        let started = Instant::now();
+        let (status, body) = post(port, "broker-secret", body());
+        let elapsed = started.elapsed();
+        assert_eq!(status, 502);
+        assert!(body.contains("upstream unavailable"));
+        assert!(
+            elapsed < Duration::from_secs(8),
+            "connect took {elapsed:?}, connect timeout not applied"
+        );
+        let text = fs::read_to_string(&audit).unwrap();
+        let event: Value = serde_json::from_str(text.lines().last().unwrap()).unwrap();
+        assert_eq!(event["status"], 502);
+        assert_eq!(event["attempts"], 1);
+        assert!(event["elapsed_ms"].as_u64().unwrap() < 8_000);
     }
 
     #[test]
