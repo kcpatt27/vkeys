@@ -653,8 +653,12 @@ fn audit(config: &Config, event: Value) {
     }
 }
 
-/// Sums `cost_usd` over the audit file. A missing file is 0.0 (first run);
-/// any other read or parse failure is an error so startup can fail closed.
+/// Sums `cost_usd` over the audit file. A missing file is 0.0 (first run).
+///
+/// The ledger is shared with the CLI, which appends `run` events that carry no
+/// spend. Those lines are skipped, not treated as errors. A line that is not
+/// JSON at all, or a `cost_usd` that is present but not a finite non-negative
+/// number, is still an error so startup fails closed.
 fn audit_spend(audit: &Path) -> Result<f64, String> {
     let text = match fs::read_to_string(audit) {
         Ok(text) => text,
@@ -673,13 +677,16 @@ fn audit_spend(audit: &Path) -> Result<f64, String> {
                 index + 1
             )
         })?;
-        let cost = event
-            .get("cost_usd")
-            .and_then(|v| v.as_f64())
+        let Some(raw) = event.get("cost_usd") else {
+            // A CLI `run` event, not a spend event.
+            continue;
+        };
+        let cost = raw
+            .as_f64()
             .filter(|c| c.is_finite() && *c >= 0.0)
             .ok_or_else(|| {
                 format!(
-                    "audit ledger {} line {} has no usable cost_usd",
+                    "audit ledger {} line {} has an unusable cost_usd",
                     audit.display(),
                     index + 1
                 )
@@ -1298,6 +1305,21 @@ mod tests {
         let dir = temp_dir("seed-missing");
         let state = State::load(&dir.join("audit.jsonl")).unwrap();
         assert_eq!(state.spent(), 0.0);
+    }
+
+    #[test]
+    fn cli_run_events_are_skipped() {
+        // The ledger is shared with the CLI, whose `run` events carry no spend.
+        let dir = temp_dir("seed-cli");
+        let audit = dir.join("audit.jsonl");
+        fs::write(
+            &audit,
+            "{\"ts\":\"2026-11-06T07:39:53\",\"cmd\":\"run\",\"exit\":2}\n\
+             {\"ts\":\"2026-11-16T19:40:27\",\"status\":200,\"cost_usd\":0.25}\n",
+        )
+        .unwrap();
+        let state = State::load(&audit).unwrap();
+        assert!((state.spent() - 0.25).abs() < 1e-12);
     }
 
     #[test]
