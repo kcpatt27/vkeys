@@ -49,6 +49,13 @@ fn run() -> i32 {
             return 2;
         }
     };
+    let state = match State::load(&config.audit) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("vkeys-broker: refusing to start: {e}");
+            return 1;
+        }
+    };
     let server = match bind(&config) {
         Ok(s) => s,
         Err(e) => {
@@ -60,6 +67,6 @@ fn run() -> i32 {
         "vkeys-broker listening on http://{}:{}",
         config.host, config.port
     );
-    serve(server, Arc::new(config), Arc::new(State::new()));
+    serve(server, Arc::new(config), Arc::new(state));
     0
 }
