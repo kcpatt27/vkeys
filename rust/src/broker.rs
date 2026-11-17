@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::{self, Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -67,14 +67,24 @@ struct Window {
 }
 
 impl State {
-    pub fn new() -> Self {
-        Self {
+    /// Builds the ledger, seeding spend from the audit file.
+    ///
+    /// The seed is the **whole** audit file, not a rolling window: the file is
+    /// the host's record of what it has spent against `budget_usd`, so
+    /// `budget_usd` is a lifetime cap per ledger file. Truncating or rotating
+    /// the file is what resets the budget, and that is a deliberate act.
+    ///
+    /// Fails closed: an audit file that exists but cannot be read or parsed is
+    /// an error, so the caller refuses to start rather than handing back a full
+    /// allowance. Only a missing file seeds 0.0, which is a genuine first run.
+    pub fn load(audit: &Path) -> Result<Self, String> {
+        Ok(Self {
             ledger: Mutex::new(Ledger {
-                spent_usd: 0.0,
+                spent_usd: audit_spend(audit)?,
                 reserved_usd: 0.0,
             }),
             rate: Mutex::new(HashMap::new()),
-        }
+        })
     }
 
     pub fn spent(&self) -> f64 {
@@ -643,6 +653,42 @@ fn audit(config: &Config, event: Value) {
     }
 }
 
+/// Sums `cost_usd` over the audit file. A missing file is 0.0 (first run);
+/// any other read or parse failure is an error so startup can fail closed.
+fn audit_spend(audit: &Path) -> Result<f64, String> {
+    let text = match fs::read_to_string(audit) {
+        Ok(text) => text,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(0.0),
+        Err(e) => return Err(format!("cannot read audit ledger {}: {e}", audit.display())),
+    };
+    let mut total = 0.0;
+    for (index, line) in text.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let event: Value = serde_json::from_str(line).map_err(|e| {
+            format!(
+                "cannot parse audit ledger {} line {}: {e}",
+                audit.display(),
+                index + 1
+            )
+        })?;
+        let cost = event
+            .get("cost_usd")
+            .and_then(|v| v.as_f64())
+            .filter(|c| c.is_finite() && *c >= 0.0)
+            .ok_or_else(|| {
+                format!(
+                    "audit ledger {} line {} has no usable cost_usd",
+                    audit.display(),
+                    index + 1
+                )
+            })?;
+        total += cost;
+    }
+    Ok(total)
+}
+
 fn respond_json(request: Request, status: u16, value: Value) {
     respond(
         request,
@@ -793,7 +839,7 @@ mod tests {
         let config = Arc::new(config);
         let server = bind(&config).unwrap();
         let port = server.server_addr().to_ip().unwrap().port();
-        let state = Arc::new(State::new());
+        let state = Arc::new(State::load(&config.audit).unwrap());
         let cfg = Arc::clone(&config);
         let st = Arc::clone(&state);
         thread::spawn(move || serve(server, cfg, st));
@@ -1229,5 +1275,66 @@ mod tests {
             reasons,
             vec!["invalid JSON", "streaming is not supported"]
         );
+    }
+
+    #[test]
+    fn audit_spend_seeds_the_ledger() {
+        let dir = temp_dir("seed");
+        let audit = dir.join("audit.jsonl");
+        fs::write(
+            &audit,
+            "{\"ts\":\"2026-11-16T19:40:27\",\"status\":200,\"cost_usd\":0.0038787}\n\
+             {\"ts\":\"2026-11-16T19:41:00\",\"status\":200,\"cost_usd\":0.25}\n\
+             {\"ts\":\"2026-11-16T19:42:00\",\"status\":429,\"cost_usd\":0.0}\n",
+        )
+        .unwrap();
+        let state = State::load(&audit).unwrap();
+        let spent = state.spent();
+        assert!((spent - 0.2538787).abs() < 1e-12, "spent {spent}");
+    }
+
+    #[test]
+    fn missing_audit_starts_at_zero() {
+        let dir = temp_dir("seed-missing");
+        let state = State::load(&dir.join("audit.jsonl")).unwrap();
+        assert_eq!(state.spent(), 0.0);
+    }
+
+    #[test]
+    fn unreadable_audit_fails_closed() {
+        let dir = temp_dir("seed-broken");
+        // A ledger that cannot be parsed must not seed a partial total.
+        let audit = dir.join("audit.jsonl");
+        fs::write(&audit, "{\"cost_usd\":0.25}\nnot json\n").unwrap();
+        assert!(State::load(&audit).is_err());
+        // A path present but not readable as a ledger is an error, not a first run.
+        let as_dir = dir.join("ledger-dir");
+        fs::create_dir_all(&as_dir).unwrap();
+        assert!(State::load(&as_dir).is_err());
+    }
+
+    fn spent(port: u16) -> f64 {
+        let value: Value = serde_json::from_str(
+            &ureq::get(&format!("http://127.0.0.1:{port}/healthz"))
+                .call()
+                .unwrap()
+                .into_string()
+                .unwrap(),
+        )
+        .unwrap();
+        value["spent_usd"].as_f64().unwrap()
+    }
+
+    #[test]
+    fn restart_keeps_spent_from_audit() {
+        let (upstream, _, _) = fake_upstream("ok");
+        let dir = temp_dir("restart");
+        let audit = dir.join("audit.jsonl");
+        let (port, _) = start_broker(upstream, audit.clone(), 5.0, 1.0, 1.0);
+        assert_eq!(post(port, "broker-secret", body()).0, 200);
+        let before = spent(port);
+        assert!(before > 0.0);
+        let (restarted, _) = start_broker(upstream, audit, 5.0, 1.0, 1.0);
+        assert_eq!(spent(restarted), before);
     }
 }

@@ -116,7 +116,12 @@ API key:  <broker/token value, not the provider key>
 
 Limits apply to the peer IP and the presented token; both buckets must allow a
 request. This caps unauthenticated floods per IP while giving each token its own
-budget. Rate and spend state live in memory and reset when the broker restarts.
+budget. Rate state lives in memory and resets when the broker restarts. Spend is
+seeded from the audit ledger at startup, so a restart does not hand the budget
+back: the seed is every `cost_usd` in the file, which makes `--budget-usd` a cap
+per ledger file. Truncate or rotate the ledger to reset the budget. If the
+ledger exists but cannot be read or parsed, the broker refuses to start rather
+than starting at zero spend; a missing ledger is a genuine first run.
 
 Because the IP bucket is shared, clients behind one address (loopback, or a
 tailnet exit/NAT) share that bucket: one busy client can exhaust the per-IP
@@ -169,7 +174,9 @@ Binding is only half the control. Also:
 
 ## Limits
 
-- spend and rate state are in memory and reset when the broker restarts
+- rate state is in memory and resets when the broker restarts; spend is seeded
+  from the whole audit ledger at startup, and an unreadable ledger stops the
+  broker instead of resetting the budget
 - budget reservation uses `VKEYS_BROKER_MAX_REQUEST_TOKENS` as the per-request
   ceiling. If the ceiling is larger than the whole budget, requests are
   admitted one at a time; raise the budget or lower the ceiling for parallelism
