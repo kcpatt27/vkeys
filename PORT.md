@@ -102,7 +102,7 @@ write in one go. The three stores were then readable by the Python build
 ## Tier 2 broker (Rust)
 
 `src/broker.rs` + `src/broker_main.rs` port `src/vkeys/broker.py` 1:1:
-OpenRouter chat-completions only, broker-token auth, in-memory budget, one audit
+OpenRouter chat-completions only, broker-token auth, budget seeded from the audit ledger at startup, one audit
 line per request, no streaming, no prompt/completion text in logs. `cargo test
 --release` runs 7 broker tests against a local fake upstream (mirroring
 `tests/test_broker.py`); no live provider call.
